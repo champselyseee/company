@@ -8,8 +8,8 @@
 Строка подключения берётся из переменной окружения DATABASE_URL (её выдаёт Railway).
 
 CLI для проверки:
-    python -m core.db --init       # создать/обновить таблицы
-    python -m core.db --selftest   # быстрый прогон: создать юзера, начислить, списать, проверить
+    python -m db --init       # создать/обновить таблицы
+    python -m db --selftest   # быстрый прогон: создать юзера, начислить, списать, проверить
 """
 
 import os
@@ -330,17 +330,6 @@ def get_total_checks() -> int:
         return row["value"] if row else 0
 
 
-# ── Датасет для дообучения ──
-
-def save_training_sample(work_type: str, input_text: str) -> None:
-    with _conn() as conn:
-        conn.execute(
-            "INSERT INTO training_data (work_type, input_text) VALUES (%s, %s)",
-            (work_type, input_text),
-        )
-        conn.commit()
-
-
 # ── CLI: инициализация схемы и самотест ──
 
 def _selftest() -> None:
@@ -394,4 +383,4 @@ if __name__ == "__main__":
     elif arg == "--selftest":
         _selftest()
     else:
-        print("Использование: python -m core.db [--init | --selftest]")
+        print("Использование: python -m db [--init | --selftest]")

@@ -83,13 +83,3 @@ INSERT INTO counters (name, value) VALUES ('total_checks', 0)
     ON CONFLICT (name) DO NOTHING
 
 ;
-
--- Датасет для дообучения (как в текущем боте, но в общей базе).
-CREATE TABLE IF NOT EXISTS training_data (
-    id         BIGSERIAL PRIMARY KEY,
-    work_type  TEXT,
-    input_text TEXT,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
-)
-
-;
