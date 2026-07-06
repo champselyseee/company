@@ -1,0 +1,201 @@
+/* ── Страница «Наши проекты» ── (рисограф-система) */
+
+/* Геро */
+.hero {
+  padding-top: 44px;
+  padding-bottom: 8px;
+  text-align: center;
+}
+@media (min-width: 920px) {
+  .hero {
+    padding-top: 60px;
+  }
+}
+.eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 13px;
+  background: var(--paper-card);
+  border: 2px solid var(--ink);
+  border-radius: 999px;
+  box-shadow: 3px 3px 0 var(--indigo);
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: var(--indigo);
+}
+.h1 {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: clamp(28px, 5vw, 46px);
+  line-height: 1.06;
+  letter-spacing: -0.5px;
+  margin: 16px 0 0;
+  color: var(--ink);
+}
+.lead {
+  margin: 14px auto 0;
+  font-size: 16px;
+  line-height: 1.6;
+  color: var(--ink-soft);
+  max-width: 54ch;
+}
+
+/* Сетка */
+.gridWrap {
+  padding-block: 26px 28px;
+}
+.grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 18px;
+}
+@media (min-width: 620px) {
+  .grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+@media (min-width: 960px) {
+  .grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+/* Карточка-ссылка: лого → название → описание → открыть */
+.card {
+  --accent: var(--coral);
+  display: flex;
+  flex-direction: column;
+  padding: 22px 20px 20px;
+  background: var(--paper-card);
+  border: 2.5px solid var(--ink);
+  border-radius: var(--r-lg);
+  box-shadow: 5px 5px 0 var(--ink);
+  text-decoration: none;
+  color: inherit;
+  transition:
+    transform 0.16s cubic-bezier(0.3, 1.4, 0.5, 1),
+    box-shadow 0.16s ease;
+}
+.card:hover {
+  transform: translate(-2px, -2px);
+  box-shadow: 7px 7px 0 var(--accent);
+}
+.card:active {
+  transform: translate(2px, 2px);
+  box-shadow: 2px 2px 0 var(--accent);
+}
+.card:focus-visible {
+  outline: 3px solid var(--indigo);
+  outline-offset: 3px;
+}
+
+.accentCoral {
+  --accent: var(--coral);
+}
+.accentIndigo {
+  --accent: var(--indigo);
+}
+.accentGreen {
+  --accent: var(--green);
+}
+.accentYellow {
+  --accent: var(--yellow);
+}
+
+/* Лого */
+.logo {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 56px;
+  height: 56px;
+  background: var(--accent);
+  border: 2.5px solid var(--ink);
+  border-radius: 16px;
+  box-shadow: 3px 3px 0 var(--ink);
+  overflow: hidden;
+  margin-bottom: 14px;
+}
+.logoImg {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.logoMono {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 26px;
+  color: var(--ink);
+}
+
+/* Название */
+.cardTitle {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 21px;
+  line-height: 1.15;
+  color: var(--ink);
+}
+.tag {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  margin-top: 8px;
+  padding: 4px 10px;
+  background: var(--paper-2);
+  color: var(--ink-soft);
+  border: 1.5px solid var(--ink);
+  border-radius: 999px;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+/* Описание */
+.cardDesc {
+  margin-top: 10px;
+  font-size: 14.5px;
+  line-height: 1.55;
+  color: var(--ink-soft);
+}
+
+/* Открыть */
+.cardCta {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  align-self: flex-start;
+  margin-top: 18px;
+  padding: 9px 16px;
+  background: var(--accent);
+  color: var(--ink);
+  border: 2.5px solid var(--ink);
+  border-radius: 12px;
+  box-shadow: 3px 3px 0 var(--ink);
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 14px;
+  transition:
+    transform 0.12s ease,
+    box-shadow 0.12s ease;
+}
+.card:hover .cardCta {
+  transform: translate(-1px, -1px);
+  box-shadow: 4px 4px 0 var(--ink);
+}
+
+/* Подпись автора */
+.madeBy {
+  text-align: center;
+  margin: 8px 0 40px;
+  font-size: 14px;
+  font-weight: 300;
+  letter-spacing: 0.5px;
+  color: var(--ink-faint);
+}

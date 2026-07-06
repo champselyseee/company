@@ -1,0 +1,427 @@
+/* ── Страница «Тарифы» ── (наследует рисограф-систему) */
+
+/* Геро */
+.hero {
+  padding-top: 44px;
+  padding-bottom: 8px;
+  text-align: center;
+}
+@media (min-width: 920px) {
+  .hero {
+    padding-top: 60px;
+  }
+}
+.eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 13px;
+  background: var(--paper-card);
+  border: 2px solid var(--ink);
+  border-radius: 999px;
+  box-shadow: 3px 3px 0 var(--indigo);
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: var(--indigo);
+}
+.h1 {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: clamp(28px, 5vw, 46px);
+  line-height: 1.06;
+  letter-spacing: -0.5px;
+  margin: 16px 0 0;
+  color: var(--ink);
+}
+.lead {
+  margin: 14px auto 0;
+  font-size: 16px;
+  line-height: 1.6;
+  color: var(--ink-soft);
+  max-width: 56ch;
+}
+
+/* Остаток */
+.balanceWrap {
+  padding-block: 22px 6px;
+}
+.balanceCard {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  background: var(--paper-card);
+  border: var(--border-w) solid var(--ink);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-offset) var(--shadow-offset) 0 var(--ink);
+  padding: 18px 22px;
+}
+.balanceIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  background: var(--yellow);
+  color: var(--ink);
+  border: 2.5px solid var(--ink);
+  border-radius: 14px;
+  box-shadow: 3px 3px 0 var(--ink);
+}
+.balanceInfo {
+  display: flex;
+  flex-direction: column;
+  margin-right: auto;
+}
+.balanceLabel {
+  font-size: 13px;
+  color: var(--ink-soft);
+  font-weight: 600;
+}
+.balanceValue {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 30px;
+  color: var(--coral-deep);
+  line-height: 1.1;
+}
+.balanceUnit {
+  font-size: 16px;
+  color: var(--ink-soft);
+}
+.balancePlan {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  text-align: right;
+  padding-left: 16px;
+  border-left: 2px dashed var(--ink-faint);
+}
+.balancePlanLabel {
+  font-size: 12px;
+  color: var(--ink-faint);
+  font-weight: 600;
+}
+.balancePlanValue {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 16px;
+  color: var(--ink);
+}
+
+/* Переключатель Пакеты / Подписка */
+.switchWrap {
+  padding-block: 18px 8px;
+  display: flex;
+  justify-content: center;
+}
+.switch {
+  display: inline-flex;
+  gap: 6px;
+  padding: 7px;
+  background: var(--paper-2);
+  border: 2.5px solid var(--ink);
+  border-radius: 999px;
+  box-shadow: 4px 4px 0 var(--ink);
+}
+.switchBtn {
+  position: relative;
+  min-height: 44px;
+  padding: 10px 26px;
+  border: none;
+  background: transparent;
+  border-radius: 999px;
+  cursor: pointer;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 15px;
+  color: var(--ink-soft);
+  transition: color 0.18s ease;
+}
+.switchBtn:hover {
+  color: var(--ink);
+}
+.switchActive {
+  color: var(--on-accent);
+}
+.switchPill {
+  position: absolute;
+  inset: 0;
+  background: var(--indigo);
+  border: 2px solid var(--ink);
+  border-radius: 999px;
+  box-shadow: 2px 2px 0 var(--ink);
+  z-index: 0;
+}
+.switchText {
+  position: relative;
+  z-index: 1;
+}
+
+/* Карточки */
+.cardsWrap {
+  padding-block: 22px 10px;
+}
+.cards {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 16px;
+}
+@media (min-width: 760px) {
+  .cards {
+    grid-template-columns: repeat(3, 1fr);
+    align-items: stretch;
+  }
+}
+.card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  background: var(--paper-card);
+  border: 2.5px solid var(--ink);
+  border-radius: var(--r-lg);
+  box-shadow: 5px 5px 0 var(--ink);
+  padding: 24px 22px;
+}
+.cardHot {
+  border-color: var(--coral);
+  box-shadow: var(--shadow-offset) var(--shadow-offset) 0 var(--coral);
+}
+@media (min-width: 760px) {
+  .cardHot {
+    transform: translateY(-8px);
+  }
+}
+.cardBadge {
+  position: absolute;
+  top: -13px;
+  left: 22px;
+  padding: 5px 12px;
+  background: var(--coral);
+  color: var(--on-accent);
+  border: 2.5px solid var(--ink);
+  border-radius: 999px;
+  box-shadow: 2px 2px 0 var(--ink);
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.cardKicker {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--indigo);
+}
+.cardChecks,
+.cardName {
+  font-family: var(--font-display);
+  font-weight: 800;
+  color: var(--ink);
+  margin-top: 6px;
+}
+.cardChecks {
+  font-size: 34px;
+  line-height: 1;
+}
+.cardChecksUnit {
+  font-size: 16px;
+  color: var(--ink-soft);
+  font-weight: 700;
+}
+.cardName {
+  font-size: 26px;
+}
+.cardPrice {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 24px;
+  color: var(--coral-deep);
+  margin-top: 12px;
+}
+.cardPeriod {
+  font-size: 14px;
+  color: var(--ink-soft);
+  font-weight: 600;
+}
+.cardPer {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--ink-soft);
+  margin-top: 6px;
+}
+.cardSave {
+  padding: 3px 8px;
+  background: var(--yellow);
+  border: 1.5px solid var(--ink);
+  border-radius: 999px;
+  font-weight: 700;
+  font-size: 11px;
+  color: var(--ink);
+}
+.featList {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  margin-top: 16px;
+}
+.feat {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  font-size: 14px;
+  line-height: 1.45;
+  color: var(--ink);
+}
+.featMark {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  margin-top: 1px;
+  background: var(--green);
+  color: var(--on-accent);
+  border: 2px solid var(--ink);
+  border-radius: 7px;
+}
+.cardBtn {
+  margin-top: 20px;
+}
+
+/* Способы оплаты */
+.payWrap {
+  padding-block: 24px 8px;
+  text-align: center;
+}
+.payLabel {
+  display: block;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--ink-faint);
+}
+.payMethods {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 12px;
+  margin-top: 12px;
+}
+.payMethod {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  padding: 10px 16px;
+  background: var(--paper-card);
+  border: 2.5px solid var(--ink);
+  border-radius: 12px;
+  box-shadow: 3px 3px 0 var(--ink);
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 14px;
+  color: var(--ink);
+}
+.payIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  background: var(--indigo);
+  color: var(--on-accent);
+  border: 2px solid var(--ink);
+  border-radius: 8px;
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 14px;
+}
+.payNote {
+  margin-top: 14px;
+  font-size: 13px;
+  color: var(--ink-faint);
+  font-weight: 500;
+}
+
+/* FAQ */
+.faqWrap {
+  padding-block: 30px 10px;
+}
+.h2 {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: clamp(22px, 3.6vw, 30px);
+  color: var(--ink);
+  letter-spacing: -0.3px;
+  margin-bottom: 18px;
+  text-align: center;
+}
+.faq {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+  max-width: 760px;
+  margin: 0 auto;
+}
+.faqItem {
+  background: var(--paper-card);
+  border: 2.5px solid var(--ink);
+  border-radius: var(--r-md);
+  box-shadow: 4px 4px 0 var(--ink);
+  padding: 16px 18px;
+}
+.faqQ {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 16px;
+  color: var(--ink);
+}
+.faqA {
+  margin-top: 7px;
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--ink-soft);
+}
+
+/* Финальный призыв */
+.finalWrap {
+  padding-block: 26px 44px;
+}
+.final {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  background: var(--indigo);
+  color: var(--on-accent);
+  border: var(--border-w) solid var(--ink);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-offset) var(--shadow-offset) 0 var(--ink);
+  padding: 26px 28px;
+}
+.finalTitle {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: clamp(22px, 4vw, 30px);
+}
+.finalText {
+  margin-top: 6px;
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--paper-2);
+  max-width: 48ch;
+}
