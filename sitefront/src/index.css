@@ -1,0 +1,207 @@
+/* ── Глобальные стили и дизайн-токены (веб-версия) ──
+   Стиль наследуем у Telegram-фронта: Risograph / тёплый дружелюбный.
+   Дуотон коралл + индиго на «бумаге», печатное смещение (жёсткие offset-тени),
+   зерно, чанковые блоки, пружинные анимации. Отличие от Telegram-версии —
+   полноценная веб-раскладка (широкие секции, шапка, сетки), а не узкий экран. */
+
+@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600;700;800&family=Unbounded:wght@500;600;700;800;900&display=swap');
+
+:root {
+  /* Палитра рисографа */
+  --paper: #f4ebda;
+  --paper-2: #ece0c8;
+  --paper-card: #fbf6ec;
+  --ink: #20202e;
+  --ink-soft: #5b5870;
+  /* Затемнён ради контраста мелкого текста на «бумаге» (AA ≈ 5:1), но остаётся
+     заметно тише ink-soft — иерархия сохраняется. */
+  --ink-faint: #656278;
+  --on-accent: #fff7ec; /* кремовый текст на цветных/чернильных подложках */
+
+  --coral: #ff5a3c;
+  --coral-deep: #e8421f;
+  --indigo: #2b2ea8;
+  --indigo-deep: #1d1f7e;
+  --yellow: #ffc23c;
+  --green: #11a56a;
+  --green-deep: #0c7d50;
+
+  /* Семантика результата */
+  --c-good: var(--green);
+  --c-warn: #e6900f;
+  --c-error: var(--coral-deep);
+
+  /* Цвета типов ошибок (подсветка текста работы + легенда). Подобраны так, чтобы
+     7 типов читались как разные оттенки на «бумаге». Менять можно здесь централизованно. */
+  --err-spelling: #d62839; /* орфографическая — красный */
+  --err-punctuation: #1d6fb8; /* пунктуационная — синий */
+  --err-grammar: #7b2cbf; /* грамматическая — фиолетовый */
+  --err-speech: #e07a00; /* речевая — оранжевый */
+  --err-factual: #0c7d50; /* фактическая — зелёный */
+  --err-logical: #1f7a8c; /* логическая — бирюзовый */
+  --err-recommendation: #b5179e; /* рекомендация — пурпурный (пунктир) */
+
+  /* Формы и линии */
+  --r-lg: 26px;
+  --r-md: 18px;
+  --r-sm: 13px;
+  --border-w: 2.5px;
+  --shadow-offset: 6px;
+
+  /* Раскладка сайта */
+  --container: 1120px;
+  /* Высота шапки. На телефоне делаем компактнее (см. медиазапрос ниже). */
+  --header-h: 64px;
+  --z-base: 0;
+  --z-sticky: 40;
+  --z-overlay: 100;
+  --z-toast: 1000;
+
+  --font-display: 'Unbounded', 'Manrope', system-ui, sans-serif;
+  --font-body: 'Manrope', system-ui, -apple-system, sans-serif;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+html,
+body {
+  min-height: 100%;
+  font-family: var(--font-body);
+  color: var(--ink);
+  background-color: var(--paper);
+}
+
+body {
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  /* Атмосфера: мягкие дуотон-пятна по углам (risographic blobs).
+     БЕЗ `background-attachment: fixed`: на iOS Safari фиксированный фон заставляет
+     перерисовывать весь экран на каждом кадре прокрутки, из-за чего контент
+     «призраком» проступал в зоне под чёлкой над шапкой. Без fixed пятна просто
+     прокручиваются вместе со страницей — визуально почти незаметно. */
+  background-image:
+    radial-gradient(circle at 8% 2%, rgba(255, 90, 60, 0.13), transparent 34%),
+    radial-gradient(circle at 96% 100%, rgba(43, 46, 168, 0.11), transparent 40%);
+}
+
+/* Зерно-текстура убрана: это был фиксированный слой на весь экран с
+   mix-blend-mode: multiply. На iOS Safari такой слой пересчитывается на каждом
+   кадре прокрутки, и «застрявший» кадр multiply-смешивания оставлял обесцвеченный
+   серый отпечаток контента в зоне под чёлкой над шапкой. Если без него призрак
+   пропал — вернём зерно безопасной версией (без fixed + multiply). */
+
+/* «Крышка» под чёлкой/статус-баром (iOS, viewport-fit=cover).
+   Высотой ровно в безопасную зону: заливает самый верх экрана тем же сплошным
+   бежевым, что и шапка, поверх декоративных дуотон-пятен. Так весь верх (от
+   края экрана до шапки) — один тон, без подкраски «пятном» и без полосы-шва.
+   На устройствах без выреза env(...) = 0 → высота 0, слой невидим. */
+body::before {
+  content: '';
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: env(safe-area-inset-top, 0px);
+  background: var(--paper);
+  z-index: 90; /* выше шапки (--z-sticky: 40), ниже меню/тостов */
+  pointer-events: none;
+}
+
+/* Телефон: «крышка» закрывает не только чёлку, а ВСЮ верхнюю полосу — от края
+   экрана до низа плашки (чёлка + высота шапки). Стоит ПОД чипами (z-index 39 <
+   --z-sticky: 40), но НАД контентом, и не двигается при прокрутке. Так под
+   липкой шапкой контент не «подмигивает» и не просвечивает в полосе над
+   плашкой — весь верх остаётся одним сплошным бежевым. */
+@media (max-width: 1023px) {
+  body::before {
+    height: calc(env(safe-area-inset-top, 0px) + var(--header-h));
+    z-index: 39;
+  }
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+button {
+  font-family: inherit;
+}
+
+:focus-visible {
+  outline: 3px solid var(--indigo);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+
+/* Невидимая, но доступная скринридерам подпись */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Ссылка «перейти к содержимому» для клавиатуры */
+.skip-link {
+  position: absolute;
+  left: 12px;
+  top: -60px;
+  z-index: var(--z-toast);
+  background: var(--ink);
+  color: var(--on-accent);
+  padding: 10px 16px;
+  border-radius: 10px;
+  font-weight: 700;
+  transition: top 0.18s ease;
+}
+.skip-link:focus {
+  top: 12px;
+}
+
+/* Контейнер фиксированной ширины с адаптивными полями */
+.container {
+  width: 100%;
+  max-width: var(--container);
+  margin: 0 auto;
+  padding-inline: 20px;
+}
+@media (min-width: 768px) {
+  .container {
+    padding-inline: 32px;
+  }
+}
+
+/* На телефоне шапка компактнее, чтобы не занимать пол-экрана. */
+@media (max-width: 767px) {
+  :root {
+    --header-h: 56px;
+  }
+}
+
+/* Доступность: гасим анимации, мгновенно показывая конечное состояние. */
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}
