@@ -194,9 +194,25 @@ def has_access(user: dict) -> bool:
 
 # ── Токены доступа к мини-аппу ──
 
+def delete_expired_tokens() -> int:
+    """Удаляет использованные и просроченные ключи доступа. Возвращает число удалённых."""
+    cutoff = _now() - timedelta(seconds=TOKEN_TTL_SECONDS)
+    with _conn() as conn:
+        cur = conn.execute(
+            "DELETE FROM access_tokens WHERE used = TRUE OR created_at < %s", (cutoff,)
+        )
+        conn.commit()
+        return cur.rowcount
+
+
 def create_token(user_id: int) -> str:
     token = secrets.token_hex(16)
+    cutoff = _now() - timedelta(seconds=TOKEN_TTL_SECONDS)
     with _conn() as conn:
+        # заодно подчищаем старьё, чтобы таблица не разрасталась
+        conn.execute(
+            "DELETE FROM access_tokens WHERE used = TRUE OR created_at < %s", (cutoff,)
+        )
         conn.execute(
             "INSERT INTO access_tokens (token, user_id) VALUES (%s, %s)", (token, user_id)
         )
