@@ -1,0 +1,87 @@
+.base {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  border-radius: var(--r-md);
+  font-family: var(--font-display);
+  font-weight: 700;
+  letter-spacing: 0.2px;
+  cursor: pointer;
+  border: var(--border-w) solid var(--ink);
+  touch-action: manipulation;
+  transition:
+    transform 0.12s cubic-bezier(0.3, 1.4, 0.5, 1),
+    box-shadow 0.12s ease,
+    background 0.18s ease,
+    opacity 0.2s;
+}
+
+.base:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.ic {
+  display: inline-flex;
+  align-items: center;
+}
+
+.full {
+  width: 100%;
+}
+
+/* Размеры */
+.md {
+  padding: 13px 20px;
+  font-size: 14px;
+  min-height: 46px;
+}
+.lg {
+  padding: 16px 26px;
+  font-size: 16px;
+  min-height: 54px;
+}
+
+/* Варианты */
+.primary {
+  background: var(--coral);
+  color: var(--on-accent);
+  box-shadow: 5px 5px 0 var(--ink);
+}
+.primary:hover:not(:disabled) {
+  transform: translate(-1px, -1px);
+  box-shadow: 6px 6px 0 var(--ink);
+  background: var(--coral-deep);
+}
+.primary:active:not(:disabled) {
+  transform: translate(5px, 5px);
+  box-shadow: 0 0 0 var(--ink);
+}
+
+.secondary {
+  background: var(--paper-card);
+  color: var(--indigo);
+  box-shadow: 4px 4px 0 var(--indigo);
+}
+.secondary:hover:not(:disabled) {
+  transform: translate(-1px, -1px);
+  box-shadow: 5px 5px 0 var(--indigo);
+}
+.secondary:active:not(:disabled) {
+  transform: translate(4px, 4px);
+  box-shadow: 0 0 0 var(--indigo);
+}
+
+.ghost {
+  background: transparent;
+  color: var(--ink);
+  border-color: transparent;
+  box-shadow: none;
+}
+.ghost:hover:not(:disabled) {
+  background: rgba(32, 32, 46, 0.06);
+}
+.ghost:active:not(:disabled) {
+  background: rgba(32, 32, 46, 0.1);
+}

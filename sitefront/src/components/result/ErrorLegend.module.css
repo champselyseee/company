@@ -1,0 +1,61 @@
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 18px;
+}
+
+.label {
+  font-family: var(--font-display);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink-soft);
+  margin-right: 2px;
+}
+
+.chip {
+  font-size: 12px;
+  font-weight: 600;
+  padding: 3px 10px;
+  border-radius: 999px;
+  border: 1.5px solid;
+  white-space: nowrap;
+}
+
+/* tint = тон цвета типа на «бумаге»; текст и рамка — насыщенный цвет. */
+.spelling {
+  color: var(--err-spelling);
+  background: color-mix(in srgb, var(--err-spelling) 13%, transparent);
+  border-color: color-mix(in srgb, var(--err-spelling) 38%, transparent);
+}
+.punctuation {
+  color: var(--err-punctuation);
+  background: color-mix(in srgb, var(--err-punctuation) 13%, transparent);
+  border-color: color-mix(in srgb, var(--err-punctuation) 38%, transparent);
+}
+.grammar {
+  color: var(--err-grammar);
+  background: color-mix(in srgb, var(--err-grammar) 16%, transparent);
+  border-color: color-mix(in srgb, var(--err-grammar) 42%, transparent);
+}
+.speech {
+  color: var(--err-speech);
+  background: color-mix(in srgb, var(--err-speech) 13%, transparent);
+  border-color: color-mix(in srgb, var(--err-speech) 38%, transparent);
+}
+.factual {
+  color: var(--err-factual);
+  background: color-mix(in srgb, var(--err-factual) 13%, transparent);
+  border-color: color-mix(in srgb, var(--err-factual) 38%, transparent);
+}
+.logical {
+  color: var(--err-logical);
+  background: color-mix(in srgb, var(--err-logical) 13%, transparent);
+  border-color: color-mix(in srgb, var(--err-logical) 38%, transparent);
+}
+.recommendation {
+  color: var(--err-recommendation);
+  background: color-mix(in srgb, var(--err-recommendation) 13%, transparent);
+  border-color: color-mix(in srgb, var(--err-recommendation) 38%, transparent);
+}

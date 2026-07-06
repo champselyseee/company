@@ -1,0 +1,38 @@
+.card {
+  background: var(--paper-card);
+  border: var(--border-w) solid var(--ink);
+  border-radius: var(--r-lg);
+}
+
+.sh_ink {
+  box-shadow: var(--shadow-offset) var(--shadow-offset) 0 var(--ink);
+}
+.sh_indigo {
+  box-shadow: var(--shadow-offset) var(--shadow-offset) 0 var(--indigo);
+}
+.sh_coral {
+  box-shadow: var(--shadow-offset) var(--shadow-offset) 0 var(--coral);
+}
+
+.pad_sm {
+  padding: 16px;
+}
+.pad_md {
+  padding: 22px;
+}
+.pad_lg {
+  padding: 28px 24px;
+}
+
+.tilted {
+  transform: rotate(var(--tilt, 0deg));
+}
+
+@media (min-width: 768px) {
+  .pad_md {
+    padding: 26px;
+  }
+  .pad_lg {
+    padding: 34px 30px;
+  }
+}
