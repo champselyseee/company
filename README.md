@@ -6,11 +6,21 @@
 
 ```
 company/
-├── core/            общий код (используют и бот, и сайт)
-│   ├── db.py            работа с общей базой (Postgres)
-│   └── schema.sql       описание таблиц базы
-├── botback/    (позже)  бэкенд Telegram-бота
-└── siteback/   (позже)  бэкенд сайта
+
+├── core/                    # общий код
+│   ├── db.py                # работа с Postgres
+│   ├── schema.sql           # схема БД
+│   ├── claude.py            # клиент Claude API
+│   ├── grok.py              # клиент Grok API (распознавание рукописи)
+│   └── config.py            # общие настройки (ключи, env и т.д.)
+│
+├── botback/                 # backend Telegram-бота
+│
+├── siteback/                # backend сайта
+│
+├── botfront/                # фронтенд Telegram Mini App (если будет)
+│
+└── sitefront/               # фронтенд сайта (Next.js/Vite и т.п.)
 ```
 
 Оба бэкенда — отдельные службы на Railway из этого же репозитория, но общий код
