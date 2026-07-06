@@ -5,7 +5,9 @@
 сайте была ОДИНАКОВОЙ (те же промпты, та же JSON-схема ответа с подсветкой ошибок).
 
 Логика повторяет живого бота (backendmirrr), но улучшена под роль общего скрипта:
-  • промпты по типам работ, схема ответа и OCR собраны в одном месте;
+  • промпты по типам работ и схема ответа собраны в одном месте;
+    (распознавание рукописного текста вынесено в отдельный модуль core/grok.py на Grok;
+     Claude по-прежнему принимает ФОТО ЗАДАНИЯ для проверки — это параметр photos у check_work);
   • после успешной проверки модуль сам пишет её в общую базу (core/db.py):
     строка в истории + «+1» к публичному счётчику counters.total_checks —
     одной транзакцией через db.record_check();
@@ -14,15 +16,13 @@
 Ключи и настройки берутся из переменных окружения:
     ANTHROPIC_API_KEY   — ключ доступа к Anthropic (обязателен)
     ANTHROPIC_MODEL     — модель проверки (по умолчанию как в боте: claude-sonnet-4-6)
-    OCR_MODEL           — модель распознавания фото (по умолчанию = ANTHROPIC_MODEL)
     MAX_TOKENS          — лимит вывода для проверки (по умолчанию 16000)
-    OCR_MAX_TOKENS      — лимит вывода для OCR (по умолчанию 4000)
     THINKING_MODE       — 'adaptive' (по умолчанию) | 'off'
     REQUEST_TIMEOUT     — таймаут запроса к Claude, сек (по умолчанию 600 — «на максимум»)
     AI_CONCURRENCY      — сколько запросов к Claude одновременно (по умолчанию 10)
 
 CLI для быстрой проверки БЕЗ обращения к сети:
-    python -m claude --selftest   # промпты/схема/OCR на месте, настройки видны
+    python -m claude --selftest   # промпты/схема на месте, настройки видны
 """
 
 import asyncio
@@ -45,9 +45,7 @@ except ImportError:  # чтобы --selftest работал даже без ус
 
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY")
 MODEL           = os.environ.get("ANTHROPIC_MODEL", "claude-sonnet-4-6")
-OCR_MODEL       = os.environ.get("OCR_MODEL", MODEL)
 MAX_TOKENS      = int(os.environ.get("MAX_TOKENS", "16000"))       # лимит вывода для проверки работ
-OCR_MAX_TOKENS  = int(os.environ.get("OCR_MAX_TOKENS", "4000"))    # лимит вывода для распознавания фото
 # Адаптивное мышление для проверки работ (рассуждающая задача). "off" — выключить.
 THINKING_MODE   = os.environ.get("THINKING_MODE", "adaptive")
 # «Таймаут на максимум»: при стриминге это таймаут чтения одного чанка, а не всей
@@ -91,9 +89,9 @@ def _sem() -> asyncio.Semaphore:
     return _semaphore
 
 
-# ─────────── ПЕРЕНОС ИЗ БОТА (backendmirrr/bot.py) — дословно ───────────
-# Единственная правка против оригинала: убран случайный символ ` в конце
-# промпта "composition".
+# ─────────── ПЕРЕНОС ИЗ БОТА (backendmirrr/bot.py) ───────────
+# Правки против оригинала: убран случайный символ ` в промпте "composition";
+# OCR_PROMPT вынесен в отдельный модуль core/grok.py (распознавание рукописи — на Grok).
 
 def _image_block(data_url: str) -> dict:
     """data:image/png;base64,XXXX → image-блок Anthropic Messages API.
@@ -322,17 +320,6 @@ _PROMPT_CLOSERS = {
 for _k, _closer in _PROMPT_CLOSERS.items():
     PROMPTS[_k] = PROMPTS[_k].replace(_closer, FORMAT_BLOCK + _closer, 1)
 
-OCR_PROMPT = """Ты — система оптического распознавания рукописного текста (OCR).
-Твоя задача: точно перевести рукописный текст с фотографии в печатный вид.
-
-ПРАВИЛА:
-- Переводи ТОЛЬКО тот текст, который видишь на фото
-- Не добавляй ничего от себя и не исправляй содержание
-- Сохраняй структуру и абзацы как в оригинале
-- Не исправляй орфографию и грамматику — переводи буква в букву
-- Если слово неразборчиво — напиши наиболее вероятный вариант и добавь [?]
-- Выведи ТОЛЬКО распознанный текст, без заголовков и комментариев"""
-
 # ─────────── КОНЕЦ ПЕРЕНОСА ───────────
 
 
@@ -446,40 +433,7 @@ async def check_work(
     return answer
 
 
-async def ocr(photo: str) -> str:
-    """Распознаёт рукописный текст с фото (data:image/...;base64,...) → печатный текст.
-
-    Отдельный вызов Claude (без стриминга и без записи в историю — OCR это не проверка).
-    """
-    _validate_photo(photo)
-    try:
-        async with _sem():
-            message = await client().messages.create(
-                model=OCR_MODEL,
-                max_tokens=OCR_MAX_TOKENS,
-                messages=[
-                    {
-                        "role": "user",
-                        "content": [
-                            _image_block(photo),
-                            {"type": "text", "text": OCR_PROMPT},
-                        ],
-                    }
-                ],
-                timeout=REQUEST_TIMEOUT,
-            )
-    except anthropic.APITimeoutError as e:
-        raise ClaudeError("Таймаут распознавания") from e
-    except anthropic.APIStatusError as e:
-        raise ClaudeError(f"Ошибка распознавания: {str(e)[:200]}") from e
-
-    recognized = _extract_text(message)
-    if not recognized:
-        raise ClaudeError("Не удалось распознать текст на фото")
-    return recognized
-
-
-# ── CLA: быстрый самотест без обращения к сети ──
+# ── CLI: быстрый самотест без обращения к сети ──
 
 def _selftest() -> None:
     assert set(PROMPTS) == {"email", "essay", "composition"}, "ожидаются 3 типа работ"
@@ -487,9 +441,8 @@ def _selftest() -> None:
         assert "ФОРМАТ ОТВЕТА" in p, f"в промпт '{k}' не вшит блок формата ответа"
         assert "`" not in p, f"в промпте '{k}' остался случайный символ `"
     assert RESULT_SCHEMA["required"] == ["score", "max_score", "segments", "criteria", "summary"]
-    assert OCR_PROMPT.lstrip().startswith("Ты — система"), "OCR-промпт повреждён"
-    print("OK: 3 промпта с блоком формата, JSON-схема и OCR-промпт на месте")
-    print(f"модель: {MODEL} | OCR: {OCR_MODEL} | max_tokens: {MAX_TOKENS} "
+    print("OK: 3 промпта с блоком формата и JSON-схема на месте")
+    print(f"модель: {MODEL} | max_tokens: {MAX_TOKENS} "
           f"| thinking: {THINKING_MODE} | timeout: {REQUEST_TIMEOUT}s")
 
 
