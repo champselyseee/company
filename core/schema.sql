@@ -24,6 +24,14 @@ CREATE TABLE IF NOT EXISTS users (
 
 ;
 
+-- Хеш пароля для входа по email на сайте (bcrypt). NULL — пароль не задан
+-- (пользователь входит через Telegram/Google). Держим отдельным ALTER, потому что
+-- CREATE TABLE IF NOT EXISTS не меняет уже существующую таблицу, а ADD COLUMN
+-- IF NOT EXISTS — идемпотентно добавит колонку и в старую базу, и в новую.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS password_hash TEXT
+
+;
+
 -- Одноразовые ключи доступа к мини-аппу (бот выдаёт при открытии WebApp, TTL 2 часа).
 CREATE TABLE IF NOT EXISTS access_tokens (
     token      TEXT PRIMARY KEY,

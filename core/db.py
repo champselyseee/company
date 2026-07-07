@@ -112,6 +112,42 @@ def get_or_create_email_user(email: str, display_name: str | None = None) -> dic
         return row
 
 
+def get_user_by_email(email: str) -> dict | None:
+    """Ищет пользователя по email (для входа по паролю). None — не найден."""
+    email = email.strip().lower()
+    with _conn() as conn:
+        return conn.execute("SELECT * FROM users WHERE email = %s", (email,)).fetchone()
+
+
+def create_email_user(
+    email: str, password_hash: str, display_name: str | None = None
+) -> dict | None:
+    """Создаёт нового пользователя с email и хешем пароля (регистрация на сайте).
+
+    Атомарно защищено от гонки: если такой email уже есть, ON CONFLICT ничего не
+    вставляет и возвращает None (caller отдаёт аккуратную ошибку «email занят»),
+    вместо падения на нарушении UNIQUE при одновременных регистрациях.
+    """
+    email = email.strip().lower()
+    with _conn() as conn:
+        row = conn.execute(
+            "INSERT INTO users (email, password_hash, display_name) "
+            "VALUES (%s, %s, %s) ON CONFLICT (email) DO NOTHING RETURNING *",
+            (email, password_hash, display_name),
+        ).fetchone()
+        conn.commit()
+        return row
+
+
+def set_password_hash(user_id: int, password_hash: str) -> None:
+    """Задаёт/меняет хеш пароля (регистрация, восстановление)."""
+    with _conn() as conn:
+        conn.execute(
+            "UPDATE users SET password_hash = %s WHERE id = %s", (password_hash, user_id)
+        )
+        conn.commit()
+
+
 def get_or_create_google_user(
     google_id: str, email: str | None = None, display_name: str | None = None
 ) -> dict:
@@ -190,6 +226,59 @@ def has_subscription(user: dict) -> bool:
 
 def has_access(user: dict) -> bool:
     return has_subscription(user) or user.get("paid_checks", 0) > 0
+
+
+def consume_check(user_id: int) -> str | None:
+    """Атомарно проверяет доступ и списывает ОДНУ проверку. Возвращает, что списано:
+
+    - "subscription" — покрыто активной подпиской, ничего не списываем;
+    - "free"         — списана бесплатная (free_used стал TRUE);
+    - "paid"         — списана одна оплаченная (paid_checks -= 1);
+    - None           — списывать нечего (нет доступа) → caller отдаёт 402.
+
+    Строка пользователя блокируется (FOR UPDATE) на время транзакции, поэтому два
+    одновременных запроса не могут списать одну и ту же проверку (без гонки).
+    Порядок списания: сперва подписка, затем бесплатная, затем оплаченные.
+    """
+    with _conn() as conn:
+        row = conn.execute(
+            "SELECT free_used, paid_checks, subscription_until FROM users "
+            "WHERE id = %s FOR UPDATE",
+            (user_id,),
+        ).fetchone()
+        if row is None:
+            conn.rollback()
+            return None
+        su = row["subscription_until"]
+        if su is not None and su > _now():
+            conn.commit()
+            return "subscription"
+        if not row["free_used"]:
+            conn.execute("UPDATE users SET free_used = TRUE WHERE id = %s", (user_id,))
+            conn.commit()
+            return "free"
+        if row["paid_checks"] > 0:
+            conn.execute(
+                "UPDATE users SET paid_checks = paid_checks - 1 WHERE id = %s", (user_id,)
+            )
+            conn.commit()
+            return "paid"
+        conn.rollback()
+        return None
+
+
+def refund_check(user_id: int, kind: str) -> None:
+    """Возврат проверки, списанной consume_check, если ИИ так и не ответил.
+
+    kind — то, что вернула consume_check. "subscription" ничего не списывала — и
+    возвращать нечего.
+    """
+    if kind == "free":
+        with _conn() as conn:
+            conn.execute("UPDATE users SET free_used = FALSE WHERE id = %s", (user_id,))
+            conn.commit()
+    elif kind == "paid":
+        add_paid_checks(user_id, 1)
 
 
 # ── Токены доступа к мини-аппу ──
@@ -331,7 +420,7 @@ def record_check(user_id: int, work_type: str, result: str, source: str = "bot")
 def get_history(user_id: int, limit: int = 5) -> list[dict]:
     with _conn() as conn:
         return conn.execute(
-            "SELECT work_type, result, created_at FROM history "
+            "SELECT id, work_type, result, created_at FROM history "
             "WHERE user_id = %s ORDER BY created_at DESC LIMIT %s",
             (user_id, limit),
         ).fetchall()

@@ -1,4 +1,15 @@
+# Общие зависимости монорепо (ставятся из корня: pip install -r requirements.txt).
+# core/ — работа с базой и ИИ:
 psycopg[binary,pool]>=3.2
 python-dotenv>=1.0.1
 anthropic>=0.40.0
 openai>=1.0.0
+
+# siteback/ — веб-бэкенд сайта:
+fastapi>=0.115
+uvicorn[standard]>=0.30
+python-multipart>=0.0.9
+email-validator>=2.1
+itsdangerous>=2.2
+bcrypt>=4.1
+httpx>=0.27
