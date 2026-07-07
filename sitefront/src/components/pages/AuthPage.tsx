@@ -15,7 +15,7 @@ import {
   IconUser,
 } from '../../lib/icons'
 import type { ToastKind } from '../ui/Toast'
-import type { Page } from '../../lib/nav'
+import { api, errorMessage, type User } from '../../lib/api'
 import styles from './AuthPage.module.css'
 
 type Mode = 'login' | 'register'
@@ -29,12 +29,10 @@ const PERKS = [
 
 export function AuthPage({
   onToast,
-  onNavigate,
   onAuth,
 }: {
   onToast: (text: string, kind?: ToastKind) => void
-  onNavigate: (p: Page) => void
-  onAuth: () => void
+  onAuth: (user: User) => void
 }) {
   const reduce = useReducedMotion()
   const [mode, setMode] = useState<Mode>('login')
@@ -42,6 +40,7 @@ export function AuthPage({
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [showPass, setShowPass] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
   const [errors, setErrors] = useState<{ email?: string; password?: string; name?: string }>({})
 
   function validate() {
@@ -53,18 +52,46 @@ export function AuthPage({
     return Object.keys(e).length === 0
   }
 
-  function submit(ev: FormEvent) {
+  async function submit(ev: FormEvent) {
     ev.preventDefault()
     if (!validate()) {
       onToast('Проверьте поля формы', 'error')
       return
     }
-    onToast(
-      mode === 'login' ? 'Вход выполнен (демо)' : 'Аккаунт создан (демо)',
-      'success',
-    )
-    onAuth()
-    onNavigate('profile')
+    setSubmitting(true)
+    try {
+      const { user } =
+        mode === 'login'
+          ? await api.auth.login({ email, password })
+          : await api.auth.register({ email, password, name })
+      onToast(mode === 'login' ? 'Вход выполнен' : 'Аккаунт создан', 'success')
+      onAuth(user)
+    } catch (e) {
+      onToast(errorMessage(e), 'error')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  // Восстановление пароля по почте.
+  async function forgot() {
+    if (!/^\S+@\S+\.\S+$/.test(email)) {
+      onToast('Введите почту, на которую придёт ссылка', 'info')
+      return
+    }
+    try {
+      await api.auth.forgotPassword(email)
+      onToast('Отправили ссылку для восстановления на почту', 'success')
+    } catch (e) {
+      onToast(errorMessage(e), 'error')
+    }
+  }
+
+  // Вход через сторонний сервис: уводим на бэкенд. Если он не подключён — подсказка.
+  function social(provider: 'google' | 'telegram') {
+    if (!api.auth.startOAuth(provider)) {
+      onToast('Этот способ входа станет доступен после подключения сервера', 'info')
+    }
   }
 
   return (
@@ -197,17 +224,25 @@ export function AuthPage({
             </Field>
 
             {mode === 'login' && (
-              <button
-                type="button"
-                className={styles.forgot}
-                onClick={() => onToast('Восстановление пароля — в полной версии', 'info')}
-              >
+              <button type="button" className={styles.forgot} onClick={forgot}>
                 Забыли пароль?
               </button>
             )}
 
-            <Button fullWidth size="lg" type="submit" trailing={<IconArrowRight size={20} />}>
-              {mode === 'login' ? 'Войти' : 'Создать аккаунт'}
+            <Button
+              fullWidth
+              size="lg"
+              type="submit"
+              disabled={submitting}
+              trailing={submitting ? undefined : <IconArrowRight size={20} />}
+            >
+              {submitting
+                ? mode === 'login'
+                  ? 'Входим…'
+                  : 'Создаём…'
+                : mode === 'login'
+                  ? 'Войти'
+                  : 'Создать аккаунт'}
             </Button>
           </form>
 
@@ -216,23 +251,13 @@ export function AuthPage({
           </div>
 
           <div className={styles.social}>
-            <button
-              className={styles.socialBtn}
-              onClick={() => onToast('Вход через Telegram — в полной версии', 'info')}
-            >
+            <button className={styles.socialBtn} onClick={() => social('telegram')}>
               <IconTelegram size={20} /> Продолжить с Telegram
             </button>
-            <button
-              className={styles.socialBtn}
-              onClick={() => onToast('Вход через Google — в полной версии', 'info')}
-            >
+            <button className={styles.socialBtn} onClick={() => social('google')}>
               <IconGoogle size={20} /> Продолжить с Google
             </button>
           </div>
-
-          <p className={styles.stubNote}>
-            Это заглушка: форма демонстрационная, реального входа и аккаунта пока нет.
-          </p>
         </motion.div>
       </div>
     </div>

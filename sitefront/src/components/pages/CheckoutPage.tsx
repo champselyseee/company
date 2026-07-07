@@ -2,22 +2,25 @@ import { useState } from 'react'
 import { Button } from '../ui/Button'
 import {
   PAYMENT_METHODS,
-  type PaymentMethod,
   type PaymentMethodId,
   type PurchaseOffer,
 } from '../../lib/billing'
 import { IconArrowRight, IconCheck, IconStar, IconTelegram } from '../../lib/icons'
 import type { Page } from '../../lib/nav'
+import type { ToastKind } from '../ui/Toast'
+import { api, errorMessage } from '../../lib/api'
 import styles from './CheckoutPage.module.css'
 
 export function CheckoutPage({
   offer,
-  onConfirm,
+  onToast,
   onNavigate,
+  onPaid,
 }: {
   offer: PurchaseOffer | null
-  onConfirm: (offer: PurchaseOffer, method: PaymentMethod) => void
+  onToast: (text: string, kind?: ToastKind) => void
   onNavigate: (p: Page) => void
+  onPaid: () => void
 }) {
   const [methodId, setMethodId] = useState<PaymentMethodId>(PAYMENT_METHODS[0].id)
   const [promo, setPromo] = useState('')
@@ -46,14 +49,28 @@ export function CheckoutPage({
 
   const method = PAYMENT_METHODS.find((m) => m.id === methodId) ?? PAYMENT_METHODS[0]
 
-  function pay() {
+  // Создаём платёж на сервере. Если провайдер вернул ссылку — уводим туда;
+  // иначе (оплата уже прошла) сообщаем наверх, чтобы обновить баланс.
+  async function pay() {
     if (!offer) return
     setPaying(true)
-    // Имитация оплаты: бэкенда нет, показываем «загрузку», затем подтверждаем.
-    window.setTimeout(() => {
+    try {
+      const res = await api.billing.createPayment({
+        kind: offer.kind,
+        id: offer.id,
+        method: methodId,
+        promo: promo.trim() || undefined,
+      })
+      if (res.confirmationUrl) {
+        window.location.href = res.confirmationUrl
+        return
+      }
+      onPaid()
+    } catch (e) {
+      onToast(errorMessage(e), 'error')
+    } finally {
       setPaying(false)
-      onConfirm(offer, method)
-    }, 1200)
+    }
   }
 
   return (
@@ -144,7 +161,8 @@ export function CheckoutPage({
               {paying ? 'Оплачиваем…' : `Оплатить ${offer.price.toLocaleString('ru-RU')} ₽`}
             </Button>
             <p className={styles.disclaimer}>
-              Демо-оплата: деньги реально не списываются, проверки начислятся для примера.
+              Оплата проходит через защищённое соединение. Проверки зачислятся сразу после
+              подтверждения оплаты.
             </p>
           </div>
         </aside>
