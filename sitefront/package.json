@@ -1,9 +1,9 @@
 {
-  "name": "ege-checker-demo",
+  "name": "ege-checker-sitefront",
   "private": true,
   "version": "1.0.0",
   "type": "module",
-  "description": "Демо-версия веб-фронтенда ЕГЭ-чекера (React + Vite) для деплоя на Vercel. Без бэкенда и токенов.",
+  "description": "Веб-фронтенд ЕГЭ-чекера (React + Vite). Обращается к бэкенду сайта через VITE_API_URL.",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
