@@ -180,12 +180,6 @@ export function CounterPage() {
           ))}
         </motion.div>
       </section>
-
-      <p className={styles.editHint}>
-        Предметы и даты — в файле{' '}
-        <code className={styles.code}>src/lib/examDates.ts</code>, таблицы перевода — в{' '}
-        <code className={styles.code}>src/data/examScales.json</code>.
-      </p>
     </div>
   )
 }
