@@ -1,7 +1,8 @@
-/* Тарифы и оплата (демо). Это UI-шаблон без бэкенда: цены и пакеты выдуманы,
-   реальной оплаты нет — покупка имитируется и обновляет остаток локально. */
+/* Тарифы и способы оплаты — статический конфиг витрины (пакеты, подписки, кнопки
+   оплаты). Само создание платежа идёт через api.billing.createPayment (см. src/lib/api).
+   Идентификаторы способов оплаты совпадают с provider в базе (processed_payments). */
 
-export type PaymentMethodId = 'youmoney' | 'tg_stars'
+export type PaymentMethodId = 'yookassa' | 'stars'
 
 export interface CheckPackage {
   id: string
@@ -47,8 +48,6 @@ export interface PurchaseOffer {
   planName?: string
 }
 
-/* Стартовый остаток проверок (демо). */
-export const INITIAL_BALANCE = 3
 export const FREE_PLAN = 'Бесплатный'
 
 export const PACKAGES: CheckPackage[] = [
@@ -97,13 +96,13 @@ export const PLANS: SubPlan[] = [
 
 export const PAYMENT_METHODS: PaymentMethod[] = [
   {
-    id: 'youmoney',
+    id: 'yookassa',
     label: 'ЮMoney',
     iconKey: 'youmoney',
     note: 'Оплата кошельком или картой через ЮMoney',
   },
   {
-    id: 'tg_stars',
+    id: 'stars',
     label: 'Telegram Stars',
     iconKey: 'telegram',
     note: 'Оплата звёздами прямо в Telegram',

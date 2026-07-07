@@ -2,6 +2,7 @@ import { motion } from 'motion/react'
 import { useCountUp } from '../../lib/useCountUp'
 import { WORK_TYPES, type WorkType } from '../../lib/workTypes'
 import { DEMO_RESULTS } from '../../lib/demo'
+import type { StructuredResult } from '../../lib/result'
 import { HighlightedText } from './HighlightedText'
 import { ErrorLegend } from './ErrorLegend'
 import { CriteriaCard } from './CriteriaCard'
@@ -26,10 +27,11 @@ function ScoreCounter({ target, max }: { target: number; max: number }) {
 }
 
 /* Экран разбора (как в боте): крупный балл → легенда → текст с подсветкой →
-   карточки критериев → итог и рекомендации. Данные берём из DEMO_RESULTS;
-   когда появится сервер, сюда же передадим реальный StructuredResult. */
-export function ResultView({ type }: { type: WorkType }) {
-  const data = DEMO_RESULTS[type]
+   карточки критериев → итог и рекомендации.
+   Если передан `result` — показываем реальный разбор с сервера; иначе берём
+   готовый пример из DEMO_RESULTS[type] (витрина «Посмотреть пример»). */
+export function ResultView({ type, result }: { type: WorkType; result?: StructuredResult }) {
+  const data = result ?? DEMO_RESULTS[type]
   const resultLabel = WORK_TYPES[type].resultLabel
   const heroStyle =
     data.max_score > 0 ? { background: heroColor(data.score / data.max_score) } : undefined

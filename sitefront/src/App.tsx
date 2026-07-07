@@ -12,27 +12,25 @@ import { CheckoutPage } from './components/pages/CheckoutPage'
 import { ProjectsPage } from './components/pages/ProjectsPage'
 import { ToastHost, type ToastItem, type ToastKind } from './components/ui/Toast'
 import type { Page } from './lib/nav'
-import {
-  FREE_PLAN,
-  INITIAL_BALANCE,
-  pluralChecks,
-  type PaymentMethod,
-  type PurchaseOffer,
-} from './lib/billing'
+import { FREE_PLAN, type PurchaseOffer } from './lib/billing'
+import { api, type User } from './lib/api'
 
 export function App() {
   const [page, setPage] = useState<Page>('check')
   const [toasts, setToasts] = useState<ToastItem[]>([])
   const toastId = useRef(0)
-  // Биллинг (демо): остаток проверок, текущий план и выбранный для оплаты тариф.
-  const [balance, setBalance] = useState(INITIAL_BALANCE)
-  const [planName, setPlanName] = useState(FREE_PLAN)
-  // Авторизован ли пользователь (демо): управляет видимостью кнопки «Войти».
-  const [isAuthed, setIsAuthed] = useState(false)
+  // Текущий пользователь (null — не авторизован). Приходит с сервера через api.auth.me().
+  // Баланс проверок и название тарифа берём из него; пока бэка нет — null и нули.
+  const [user, setUser] = useState<User | null>(null)
+  // Выбранный для оплаты тариф (пакет или подписка).
   const [selectedOffer, setSelectedOffer] = useState<PurchaseOffer | null>(null)
   const reduce = useReducedMotion()
   const mainRef = useRef<HTMLElement>(null)
   const firstRender = useRef(true)
+
+  const isAuthed = user !== null
+  const balance = user?.balance ?? 0
+  const planName = user?.plan ?? FREE_PLAN
 
   const dismiss = useCallback((id: number) => {
     setToasts((list) => list.filter((t) => t.id !== id))
@@ -45,26 +43,45 @@ export function App() {
     window.setTimeout(() => dismiss(id), 3500)
   }, [dismiss])
 
+  // Подтянуть пользователя с сервера. Тихо (без тоста): если не залогинен или
+  // бэкенд не подключён — считаем гостем и показываем нули/пустые состояния.
+  const refreshUser = useCallback(async () => {
+    try {
+      setUser(await api.auth.me())
+    } catch {
+      setUser(null)
+    }
+  }, [])
+
+  // При загрузке приложения один раз проверяем сессию.
+  useEffect(() => {
+    void refreshUser()
+  }, [refreshUser])
+
+  // Вход/регистрация выполнены — сохраняем пользователя и ведём в профиль.
+  const handleAuth = useCallback((u: User) => {
+    setUser(u)
+    setPage('profile')
+  }, [])
+
   // Выбор тарифа → переход к оформлению.
   const buyOffer = useCallback((offer: PurchaseOffer) => {
     setSelectedOffer(offer)
     setPage('checkout')
   }, [])
 
-  // Имитация оплаты (бэкенда нет): начисляем проверки, обновляем план, ведём в профиль.
-  const confirmPurchase = useCallback(
-    (offer: PurchaseOffer, _method: PaymentMethod) => {
-      setBalance((b) => b + offer.checksAdded)
-      if (offer.planName) setPlanName(offer.planName)
-      setSelectedOffer(null)
-      notify(
-        `Оплачено (демо): +${offer.checksAdded} ${pluralChecks(offer.checksAdded)}`,
-        'success',
-      )
-      setPage('profile')
-    },
-    [notify],
-  )
+  // Оплата подтверждена сервером без внешнего редиректа — обновляем баланс из профиля.
+  const handlePaid = useCallback(async () => {
+    setSelectedOffer(null)
+    await refreshUser()
+    notify('Оплата прошла — проверки начислены', 'success')
+    setPage('profile')
+  }, [refreshUser, notify])
+
+  // Проверка списала баланс — отражаем новый остаток у авторизованного пользователя.
+  const handleBalanceChange = useCallback((next: number) => {
+    setUser((u) => (u ? { ...u, balance: next } : u))
+  }, [])
 
   // При смене раздела: прокрутка наверх и перевод фокуса на контент
   // (чтобы скринридер начинал читать новый раздел сначала). Первый рендер
@@ -88,7 +105,12 @@ export function App() {
         )
       case 'checkout':
         return (
-          <CheckoutPage offer={selectedOffer} onConfirm={confirmPurchase} onNavigate={setPage} />
+          <CheckoutPage
+            offer={selectedOffer}
+            onToast={notify}
+            onNavigate={setPage}
+            onPaid={handlePaid}
+          />
         )
       case 'projects':
         return <ProjectsPage />
@@ -97,24 +119,27 @@ export function App() {
       case 'profile':
         return (
           <ProfilePage
+            user={user}
             onToast={notify}
             onNavigate={setPage}
-            onLogout={() => setIsAuthed(false)}
+            onLogout={() => setUser(null)}
             balance={balance}
             planName={planName}
           />
         )
       case 'auth':
         return (
-          <AuthPage
-            onToast={notify}
-            onNavigate={setPage}
-            onAuth={() => setIsAuthed(true)}
-          />
+          <AuthPage onToast={notify} onAuth={handleAuth} />
         )
       case 'check':
       default:
-        return <CheckPage onToast={notify} />
+        return (
+          <CheckPage
+            onToast={notify}
+            onNavigate={setPage}
+            onBalanceChange={handleBalanceChange}
+          />
+        )
     }
   }
 
@@ -148,7 +173,7 @@ export function App() {
       </main>
 
       <footer className="container" style={footerStyle}>
-        <span>ЕГЭ-чекер · веб-шаблон UI</span>
+        <span>ЕГЭ-чекер · проверка по критериям</span>
         <span>Английский · Русский</span>
       </footer>
 
