@@ -5,6 +5,9 @@ import { Button } from '../ui/Button'
 import { useCountUp } from '../../lib/useCountUp'
 import { WORK_TYPES, WORK_TYPE_ORDER, type WorkType } from '../../lib/workTypes'
 import { ResultView } from '../result/ResultView'
+import type { StructuredResult } from '../../lib/result'
+import { api, ApiError, errorMessage } from '../../lib/api'
+import type { Page } from '../../lib/nav'
 import {
   IconArrowRight,
   IconBook,
@@ -30,6 +33,7 @@ const EXAMPLE_LABELS: Record<WorkType, string> = {
 }
 
 const STATS = [
+  // TODO: «работ проверено» подключить к публичному счётчику — api.stats.getTotalChecks().
   { value: 12480, suffix: '', label: 'работ проверено', Icon: IconTarget },
   { value: 96, suffix: '%', label: 'совпадение с экспертом', Icon: IconCheck },
   { value: 60, suffix: ' сек', label: 'средняя проверка', Icon: IconBolt },
@@ -42,14 +46,42 @@ const STEPS = [
   { n: 3, title: 'Получи разбор', desc: 'Баллы по каждому критерию ЕГЭ и что улучшить.' },
 ]
 
-export function CheckPage({ onToast }: { onToast: (text: string, kind?: ToastKind) => void }) {
+// Открыть системный выбор файла и вернуть выбранный файл (или null).
+function pickFile(accept: string): Promise<File | null> {
+  return new Promise((resolve) => {
+    const input = document.createElement('input')
+    input.type = 'file'
+    input.accept = accept
+    input.onchange = () => resolve(input.files?.[0] ?? null)
+    input.click()
+  })
+}
+
+export function CheckPage({
+  onToast,
+  onNavigate,
+  onBalanceChange,
+}: {
+  onToast: (text: string, kind?: ToastKind) => void
+  onNavigate: (p: Page) => void
+  onBalanceChange: (balance: number) => void
+}) {
   const reduce = useReducedMotion()
   const [selected, setSelected] = useState<WorkType | null>('essay')
   const [text, setText] = useState('')
+  // Распознанный текст задания (с фото/файла) — уходит на сервер вместе с работой.
+  const [taskText, setTaskText] = useState('')
+  // Идёт проверка / распознавание — блокируем кнопки.
+  const [checking, setChecking] = useState(false)
+  const [busy, setBusy] = useState(false)
+  // Реальный разбор с сервера и тип работы, к которому он относится.
+  const [result, setResult] = useState<StructuredResult | null>(null)
+  const [resultType, setResultType] = useState<WorkType | null>(null)
   // Какой пример разбора показан (null — блок примера ещё скрыт).
   const [exampleType, setExampleType] = useState<WorkType | null>(null)
   const checkerRef = useRef<HTMLDivElement>(null)
   const exampleRef = useRef<HTMLDivElement>(null)
+  const resultRef = useRef<HTMLDivElement>(null)
 
   function scrollToChecker() {
     checkerRef.current?.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'start' })
@@ -63,9 +95,64 @@ export function CheckPage({ onToast }: { onToast: (text: string, kind?: ToastKin
     }, 60)
   }
 
-  // Кнопка проверки в форме — это демо: реальной проверки нет, мягко направляем к примеру.
-  function handleFormCheck() {
-    onToast('Это демо: готовый разбор — в кнопке «Посмотреть пример» вверху', 'info')
+  // Распознать текст с фото/файла в поле задания или работы.
+  async function recognizeInto(target: 'task' | 'work', accept: string) {
+    if (busy || checking) return
+    const file = await pickFile(accept)
+    if (!file) return
+    setBusy(true)
+    try {
+      const { text: recognized } = await api.checks.recognizeImage(file)
+      if (target === 'work') {
+        setText((prev) => (prev.trim() ? `${prev}\n${recognized}` : recognized))
+        onToast('Текст работы распознан', 'success')
+      } else {
+        setTaskText(recognized)
+        onToast('Текст задания распознан', 'success')
+      }
+    } catch (e) {
+      onToast(errorMessage(e), 'error')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  // Проверка работы: отправляем на сервер, показываем разбор, обновляем баланс.
+  async function handleFormCheck() {
+    if (!selected) {
+      onToast('Выберите тип работы', 'info')
+      return
+    }
+    if (!text.trim()) {
+      onToast('Вставьте или распознайте текст работы', 'info')
+      return
+    }
+    setChecking(true)
+    try {
+      const res = await api.checks.checkWork({
+        workType: selected,
+        taskText: taskText.trim() || undefined,
+        studentText: text,
+      })
+      setResult(res.result)
+      setResultType(selected)
+      onBalanceChange(res.balance)
+      window.setTimeout(() => {
+        resultRef.current?.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'start' })
+      }, 60)
+    } catch (e) {
+      if (e instanceof ApiError && e.status === 401) {
+        onToast('Войдите в аккаунт, чтобы проверять работы', 'info')
+        onNavigate('auth')
+      } else if (e instanceof ApiError && (e.status === 402 || e.status === 403)) {
+        onToast('Закончились проверки — пополните баланс', 'info')
+        onNavigate('pricing')
+      } else {
+        onToast(errorMessage(e), 'error')
+      }
+    } finally {
+      setChecking(false)
+    }
   }
 
   return (
@@ -139,7 +226,7 @@ export function CheckPage({ onToast }: { onToast: (text: string, kind?: ToastKin
       <section className={`container ${styles.checkerSection}`} ref={checkerRef}>
         <div className={styles.checkerHead}>
           <h2 className={styles.h2}>Проверить работу</h2>
-          <p className={styles.h2sub}>Выбери тип, вставь текст — покажем демо-разбор.</p>
+          <p className={styles.h2sub}>Выбери тип работы и вставь текст — получишь разбор по критериям.</p>
         </div>
 
         <div className={styles.checkerCard}>
@@ -182,17 +269,20 @@ export function CheckPage({ onToast }: { onToast: (text: string, kind?: ToastKin
           <div className={styles.attachRow}>
             <button
               className={styles.attach}
-              onClick={() => onToast('Загрузка фото задания появится в полной версии', 'info')}
+              disabled={busy || checking}
+              onClick={() => recognizeInto('task', 'image/*')}
             >
               <IconCamera size={18} /> Фото задания
             </button>
             <button
               className={styles.attach}
-              onClick={() => onToast('Загрузка файла задания появится в полной версии', 'info')}
+              disabled={busy || checking}
+              onClick={() => recognizeInto('task', 'image/*,application/pdf')}
             >
               <IconUpload size={18} /> Файл задания
             </button>
           </div>
+          {taskText.trim() && <p className={styles.recognizedNote}>Задание распознано ✓</p>}
 
           {/* Шаг 3 — работа ученика */}
           <FormStep
@@ -212,9 +302,8 @@ export function CheckPage({ onToast }: { onToast: (text: string, kind?: ToastKin
           <div className={styles.attachRow}>
             <button
               className={styles.attach}
-              onClick={() =>
-                onToast('Распознавание рукописного текста появится в полной версии', 'info')
-              }
+              disabled={busy || checking}
+              onClick={() => recognizeInto('work', 'image/*')}
             >
               <IconCamera size={18} /> Фото работы (рукопись)
             </button>
@@ -225,23 +314,34 @@ export function CheckPage({ onToast }: { onToast: (text: string, kind?: ToastKin
             size="lg"
             className={styles.submit}
             onClick={handleFormCheck}
-            leading={<IconCheck size={20} />}
+            disabled={checking || busy}
+            leading={checking ? undefined : <IconCheck size={20} />}
           >
-            Проверить работу
+            {checking ? 'Проверяем…' : 'Проверить работу'}
           </Button>
-          <p className={styles.disclaimer}>
-            Это шаблон интерфейса: проверка демонстрационная, без обращения к серверу.
-          </p>
         </div>
 
       </section>
+
+      {/* ── Результат проверки (после отправки на сервер) ── */}
+      {result && resultType && (
+        <section className={`container ${styles.exampleSection}`} ref={resultRef}>
+          <div className={styles.checkerHead}>
+            <h2 className={styles.h2}>Результат проверки</h2>
+            <p className={styles.h2sub}>Баллы по критериям ЕГЭ и разбор ошибок.</p>
+          </div>
+          <AnimatePresence mode="wait">
+            <ResultView key="live-result" type={resultType} result={result} />
+          </AnimatePresence>
+        </section>
+      )}
 
       {/* ── Пример разбора (появляется по кнопке «Посмотреть пример») ── */}
       {exampleType && (
         <section className={`container ${styles.exampleSection}`} ref={exampleRef}>
           <div className={styles.checkerHead}>
             <h2 className={styles.h2}>Пример разбора</h2>
-            <p className={styles.h2sub}>Выбери тип работы — покажем готовый демо-разбор.</p>
+            <p className={styles.h2sub}>Выбери тип работы — покажем готовый разбор.</p>
           </div>
 
           <div className={styles.segmented} role="group" aria-label="Тип работы для примера">

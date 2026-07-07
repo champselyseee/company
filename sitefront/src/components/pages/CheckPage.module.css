@@ -391,9 +391,21 @@
   cursor: pointer;
   transition: border-color 0.16s ease, color 0.16s ease;
 }
-.attach:hover {
+.attach:hover:not(:disabled) {
   border-color: var(--indigo);
   color: var(--indigo);
+}
+.attach:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.recognizedNote {
+  margin-top: 10px;
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--green);
 }
 
 .submit {
