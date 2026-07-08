@@ -1,4 +1,4 @@
-– # syntax=docker/dockerfile:1
+# syntax=docker/dockerfile:1
 
 # Бэкенд сайта (siteback) для Railway.
 # Собираем детерминированно, без авто-угадывания: ставим зависимости, кладём общий
