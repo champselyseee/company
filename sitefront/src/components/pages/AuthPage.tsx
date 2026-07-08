@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { FormEvent, ReactNode } from 'react'
 import { motion, useReducedMotion } from 'motion/react'
 import { Button } from '../ui/Button'
@@ -16,6 +16,7 @@ import {
 } from '../../lib/icons'
 import type { ToastKind } from '../ui/Toast'
 import { api, errorMessage, type User } from '../../lib/api'
+import { useCountUp } from '../../lib/useCountUp'
 import styles from './AuthPage.module.css'
 
 type Mode = 'login' | 'register'
@@ -26,6 +27,17 @@ const PERKS = [
   'История проверок и прогресс',
   'Счётчик дней до экзамена',
 ]
+
+// Витринное число проверок для плашки, если бэкенд недоступен.
+const FALLBACK_TOTAL_CHECKS = 12480
+
+// Округляем число проверок ВНИЗ до ближайшей «круглой» ступени: 100 / 1 000 / 10 000…
+// (наибольшая степень десятки, не превышающая n). Для n < 100 не используется.
+function checksMilestone(n: number): number {
+  let step = 100
+  while (step * 10 <= n) step *= 10
+  return step
+}
 
 export function AuthPage({
   onToast,
@@ -42,6 +54,18 @@ export function AuthPage({
   const [showPass, setShowPass] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [errors, setErrors] = useState<{ email?: string; password?: string; name?: string }>({})
+  // Публичный счётчик проверок для плашки. null — ещё не загрузили / бэк недоступен.
+  const [totalChecks, setTotalChecks] = useState<number | null>(null)
+  useEffect(() => {
+    let alive = true
+    api.stats
+      .getTotalChecks()
+      .then((r) => alive && setTotalChecks(r.totalChecks))
+      .catch(() => {}) // бэк недоступен — оставляем витринное число
+    return () => {
+      alive = false
+    }
+  }, [])
 
   function validate() {
     const e: typeof errors = {}
@@ -123,9 +147,7 @@ export function AuthPage({
               </li>
             ))}
           </ul>
-          <div className={styles.asideSticker}>
-            <IconSparkles size={18} /> 12 480+ проверок
-          </div>
+          <ChecksSticker total={totalChecks} />
         </motion.aside>
 
         {/* Форма */}
@@ -294,6 +316,23 @@ function Field({
           {error}
         </span>
       )}
+    </div>
+  )
+}
+
+// Плашка «N+ проверок»: живое число из БД, округлённое вниз до круглой ступени.
+function ChecksSticker({ total }: { total: number | null }) {
+  // total === null — ещё не загрузили / бэк недоступен: показываем витринное число.
+  // total < 100 — честное «<100». Иначе — округлённая ступень с «+», докручивая её анимацией.
+  const step = total !== null && total >= 100 ? checksMilestone(total) : 0
+  const n = useCountUp(step)
+  let label: string
+  if (total === null) label = `${FALLBACK_TOTAL_CHECKS.toLocaleString('ru-RU')}+ проверок`
+  else if (total < 100) label = '<100 проверок'
+  else label = `${n.toLocaleString('ru-RU')}+ проверок`
+  return (
+    <div className={styles.asideSticker}>
+      <IconSparkles size={18} /> {label}
     </div>
   )
 }
