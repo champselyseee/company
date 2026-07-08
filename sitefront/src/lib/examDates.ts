@@ -26,8 +26,8 @@ export interface Exam {
 
 /* ⬇️ Меняй предметы и даты здесь. */
 export const EXAMS: Exam[] = [
-  { id: 'russian', subject: 'Русский язык', shortName: 'Русский', abbr: 'Рус', dative: 'русскому', month: 5, day: 28 },
-  { id: 'english', subject: 'Английский язык', shortName: 'Английский', abbr: 'Англ', dative: 'английскому', month: 6, day: 9 },
+  { id: 'russian', subject: 'Русский язык', shortName: 'Русский', abbr: 'Рус', dative: 'русскому', month: 6, day: 4 },
+  { id: 'english', subject: 'Английский язык', shortName: 'Английский', abbr: 'Англ', dative: 'английскому', month: 6, day: 15 },
 ]
 
 const DAY_MS = 24 * 60 * 60 * 1000
