@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { CSSProperties } from 'react'
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
 import { Button } from '../ui/Button'
@@ -32,9 +32,12 @@ const EXAMPLE_LABELS: Record<WorkType, string> = {
   composition: 'Сочинение',
 }
 
+// Витринное число «работ проверено» на случай, если бэкенд недоступен. Как только
+// придёт живой счётчик из БД (api.stats.getTotalChecks), он заменит эту заглушку.
+const FALLBACK_TOTAL_CHECKS = 12480
+
 const STATS = [
-  // TODO: «работ проверено» подключить к публичному счётчику — api.stats.getTotalChecks().
-  { value: 12480, suffix: '', label: 'работ проверено', Icon: IconTarget },
+  { value: FALLBACK_TOTAL_CHECKS, suffix: '', label: 'работ проверено', Icon: IconTarget },
   { value: 96, suffix: '%', label: 'совпадение с экспертом', Icon: IconCheck },
   { value: 60, suffix: ' сек', label: 'средняя проверка', Icon: IconBolt },
   { value: 2, suffix: '', label: 'языка: рус + англ', Icon: IconSparkles },
@@ -67,6 +70,19 @@ export function CheckPage({
   onBalanceChange: (balance: number) => void
 }) {
   const reduce = useReducedMotion()
+  // Публичный счётчик проверок для первой плитки статистики. null — ещё не загрузили
+  // (или бэк недоступен): тогда показываем витринное FALLBACK_TOTAL_CHECKS.
+  const [totalChecks, setTotalChecks] = useState<number | null>(null)
+  useEffect(() => {
+    let alive = true
+    api.stats
+      .getTotalChecks()
+      .then((r) => alive && setTotalChecks(r.totalChecks))
+      .catch(() => {}) // бэк недоступен — оставляем витринное число
+    return () => {
+      alive = false
+    }
+  }, [])
   const [selected, setSelected] = useState<WorkType | null>('essay')
   const [text, setText] = useState('')
   // Распознанный текст задания (с фото/файла) — уходит на сервер вместе с работой.
@@ -216,8 +232,12 @@ export function CheckPage({
       {/* ── Полоса статистики ── */}
       <section className={`container ${styles.statsWrap}`}>
         <div className={styles.stats}>
-          {STATS.map((s) => (
-            <StatTile key={s.label} {...s} />
+          {STATS.map((s, i) => (
+            <StatTile
+              key={s.label}
+              {...s}
+              value={i === 0 && totalChecks !== null ? totalChecks : s.value}
+            />
           ))}
         </div>
       </section>
