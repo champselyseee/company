@@ -1,0 +1,21 @@
+.dots::after {
+  content: '';
+  animation: dots 1.5s steps(4, end) infinite;
+}
+
+/* Keyframes держим в этом же модуле — иначе CSS Modules скоупит имя в `animation`,
+   и глобальный @keyframes (index.css) не находится. */
+@keyframes dots {
+  0% {
+    content: '';
+  }
+  25% {
+    content: '.';
+  }
+  50% {
+    content: '..';
+  }
+  75% {
+    content: '...';
+  }
+}

@@ -1,0 +1,26 @@
+.card {
+  background: var(--paper-card);
+  border: var(--border-w) solid var(--ink);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-offset) var(--shadow-offset) 0 var(--ink);
+  margin: 6px auto 10px;
+  animation: pop 0.5s cubic-bezier(0.22, 1.18, 0.36, 1) both;
+}
+
+.form {
+  padding: 26px 22px 24px;
+}
+
+.loading {
+  padding: 56px 24px;
+  text-align: center;
+}
+
+.result {
+  padding: 22px 20px 24px;
+}
+
+.noaccess {
+  padding: 44px 26px;
+  text-align: center;
+}

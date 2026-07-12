@@ -1,0 +1,47 @@
+.loadingTitle {
+  font-family: var(--font-display);
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--ink);
+  margin-bottom: 10px;
+}
+
+.loadingSub {
+  font-size: 13px;
+  color: var(--ink-soft);
+  line-height: 1.6;
+}
+
+.noAccessIcon {
+  display: inline-block;
+  font-size: 54px;
+  margin-bottom: 18px;
+  animation: bob 2.4s ease-in-out infinite;
+}
+
+.noAccessTitle {
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 800;
+  color: var(--ink);
+  margin-bottom: 10px;
+}
+
+.noAccessSub {
+  font-size: 14px;
+  color: var(--ink-soft);
+  line-height: 1.65;
+  margin-bottom: 26px;
+}
+
+/* Keyframes держим в этом же модуле — иначе CSS Modules скоупит имя в `animation`,
+   и глобальный @keyframes (index.css) не находится. */
+@keyframes bob {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-6px);
+  }
+}

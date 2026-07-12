@@ -1,0 +1,53 @@
+.base {
+  width: 100%;
+  border-radius: var(--r-md);
+  font-family: var(--font-display);
+  font-weight: 700;
+  letter-spacing: 0.2px;
+  cursor: pointer;
+  border: var(--border-w) solid var(--ink);
+  transition:
+    transform 0.12s cubic-bezier(0.3, 1.4, 0.5, 1),
+    box-shadow 0.12s ease,
+    opacity 0.2s;
+}
+
+.primary {
+  padding: 15px;
+  background: var(--coral);
+  color: var(--on-accent);
+  font-size: 15px;
+  box-shadow: 5px 5px 0 var(--ink);
+}
+
+.primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  box-shadow: 3px 3px 0 var(--ink);
+}
+
+.primary:active:not(:disabled) {
+  transform: translate(5px, 5px);
+  box-shadow: 0 0 0 var(--ink);
+}
+
+.secondary {
+  padding: 13px;
+  background: var(--paper-card);
+  color: var(--indigo);
+  font-size: 14px;
+  box-shadow: 4px 4px 0 var(--indigo);
+}
+
+.secondary:active {
+  transform: translate(4px, 4px);
+  box-shadow: 0 0 0 var(--indigo);
+}
+
+.spaced {
+  margin-top: 16px;
+}
+
+.spacedSm {
+  margin-top: 14px;
+}

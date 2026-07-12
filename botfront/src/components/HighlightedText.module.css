@@ -1,0 +1,47 @@
+.text {
+  border: var(--border-w) solid var(--ink);
+  border-radius: var(--r-md);
+  background: var(--paper-card);
+  box-shadow: 3px 3px 0 rgba(32, 32, 46, 0.16);
+  padding: 16px 18px;
+  margin-bottom: 22px;
+  font-size: 15px;
+  line-height: 1.8;
+  color: var(--ink);
+  white-space: pre-wrap; /* сохраняем абзацы/переносы из текста работы */
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+
+.mark {
+  background: transparent;
+  color: inherit;
+  text-decoration-line: underline;
+  text-decoration-thickness: 2.5px;
+  text-underline-offset: 3px;
+  text-decoration-skip-ink: none;
+  -webkit-text-decoration-skip: none;
+}
+
+.spelling {
+  text-decoration-color: var(--err-spelling);
+}
+.punctuation {
+  text-decoration-color: var(--err-punctuation);
+}
+.grammar {
+  text-decoration-color: var(--err-grammar);
+}
+.speech {
+  text-decoration-color: var(--err-speech);
+}
+.factual {
+  text-decoration-color: var(--err-factual);
+}
+.logical {
+  text-decoration-color: var(--err-logical);
+}
+.recommendation {
+  text-decoration-color: var(--err-recommendation);
+  text-decoration-style: dashed; /* рекомендация — пунктир, не «ошибка» */
+}

@@ -1,0 +1,45 @@
+/* Полоса счётчиков под шапкой формы — в стиле плиток статистики сайта. */
+.strip {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-bottom: 22px;
+}
+/* Когда личного счётчика нет — общий занимает всю ширину. */
+.single {
+  grid-template-columns: 1fr;
+}
+
+.tile {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 13px 15px;
+  background: var(--paper-card);
+  border: var(--border-w) solid var(--ink);
+  border-radius: var(--r-md);
+  box-shadow: 4px 4px 0 var(--ink);
+}
+/* Личный счётчик выделяем коралловой тенью — как акцентные карточки на сайте. */
+.tileMine {
+  box-shadow: 4px 4px 0 var(--coral);
+}
+
+.num {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 25px;
+  line-height: 1;
+  color: var(--coral-deep);
+  font-variant-numeric: tabular-nums;
+}
+.tileMine .num {
+  color: var(--indigo);
+}
+
+.label {
+  font-size: 11.5px;
+  font-weight: 600;
+  line-height: 1.25;
+  color: var(--ink-soft);
+}

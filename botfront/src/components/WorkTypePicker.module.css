@@ -1,0 +1,101 @@
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 22px;
+}
+
+.card {
+  background: var(--paper);
+  border: var(--border-w) solid var(--ink);
+  border-radius: var(--r-md);
+  box-shadow: 4px 4px 0 var(--ink);
+  padding: 13px 15px;
+  cursor: pointer;
+  transition:
+    transform 0.14s cubic-bezier(0.3, 1.4, 0.5, 1),
+    box-shadow 0.14s ease,
+    background 0.18s ease;
+}
+
+.card:active {
+  transform: translate(4px, 4px);
+  box-shadow: 0 0 0 var(--ink);
+}
+
+.card.selected {
+  background: var(--coral);
+  box-shadow: 5px 5px 0 var(--indigo);
+  transform: rotate(-0.6deg);
+}
+
+/* Сохраняем «вдавливание» и для уже выбранной карточки (иначе rotate перебивал :active). */
+.card.selected:active {
+  transform: translate(4px, 4px) rotate(-0.6deg);
+  box-shadow: 1px 1px 0 var(--indigo);
+}
+
+.content {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+}
+
+.icon {
+  width: 42px;
+  height: 42px;
+  flex-shrink: 0;
+  background: var(--paper-card);
+  border: 2px solid var(--ink);
+  border-radius: 11px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 21px;
+}
+
+.card.selected .icon {
+  background: var(--yellow);
+}
+
+.info {
+  flex: 1;
+  min-width: 0;
+}
+
+.title {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 15px;
+  color: var(--ink);
+}
+
+.subtitle {
+  font-size: 12px;
+  color: var(--ink-soft);
+  margin-top: 2px;
+}
+
+/* Чернильный текст на коралле читается лучше кремового (контраст ~4.6:1 против ~2.4:1). */
+.card.selected .title {
+  color: var(--ink);
+}
+
+.card.selected .subtitle {
+  color: rgba(32, 32, 46, 0.78);
+}
+
+.check {
+  font-family: var(--font-display);
+  font-weight: 800;
+  color: var(--ink);
+  font-size: 18px;
+  opacity: 0;
+  transform: scale(0.3) rotate(-20deg);
+  transition: all 0.2s cubic-bezier(0.3, 1.6, 0.5, 1);
+}
+
+.card.selected .check {
+  opacity: 1;
+  transform: scale(1) rotate(0deg);
+}

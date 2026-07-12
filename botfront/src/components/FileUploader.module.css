@@ -1,0 +1,89 @@
+.zone {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.dropLabel {
+  flex: 1;
+  background: var(--paper);
+  border: var(--border-w) dashed var(--ink);
+  border-radius: var(--r-md);
+  padding: 16px 14px;
+  text-align: center;
+  cursor: pointer;
+  transition:
+    background 0.18s ease,
+    transform 0.14s ease;
+}
+
+.dropLabel:hover {
+  background: var(--paper-2);
+}
+
+.dropLabel:active {
+  transform: scale(0.98);
+}
+
+.dropLabel input {
+  display: none;
+}
+
+.dropIcon {
+  font-size: 24px;
+  margin-bottom: 5px;
+}
+
+.dropText {
+  font-family: var(--font-display);
+  font-size: 13px;
+  color: var(--indigo);
+  font-weight: 600;
+}
+
+.preview {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  background: var(--paper);
+  border: var(--border-w) solid var(--ink);
+  border-radius: var(--r-md);
+  box-shadow: 4px 4px 0 var(--yellow);
+  padding: 13px 15px;
+  margin-bottom: 16px;
+}
+
+.previewText {
+  min-width: 0;
+}
+
+.name {
+  font-family: var(--font-display);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.meta {
+  font-size: 11px;
+  color: var(--ink-soft);
+  margin-top: 3px;
+}
+
+.remove {
+  background: var(--coral);
+  color: var(--on-accent);
+  border: 2px solid var(--ink);
+  border-radius: 50%;
+  width: 28px;
+  height: 28px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  flex-shrink: 0;
+  line-height: 1;
+}

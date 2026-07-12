@@ -1,0 +1,101 @@
+/* ── Глобальные стили и дизайн-токены ──
+   Концепция: Risograph / тёплый дружелюбный. Дуотон коралл + индиго на «бумаге»,
+   печатное смещение (жёсткие offset-тени), зерно, чанковые блоки, пружинные анимации.
+   Шрифты грузим здесь (а не в index.html), чтобы всё жило в слое стилей React-фронта. */
+
+@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&family=Unbounded:wght@500;600;700;800;900&display=swap');
+
+:root {
+  /* Палитра рисографа */
+  --paper: #f4ebda;
+  --paper-2: #ece0c8;
+  --paper-card: #fbf6ec;
+  --ink: #20202e;
+  --ink-soft: #5b5870;
+  --ink-faint: #908ca6;
+  --on-accent: #fff7ec; /* кремовый текст на цветных/чернильных подложках */
+
+  --coral: #ff5a3c;
+  --coral-deep: #e8421f;
+  --indigo: #2b2ea8;
+  --indigo-deep: #1d1f7e;
+  --yellow: #ffc23c;
+  --green: #11a56a;
+  --green-deep: #0c7d50;
+
+  /* Семантика результата */
+  --c-good: var(--green);
+  --c-warn: #e6900f;
+  --c-error: var(--coral-deep);
+
+  /* Формы и линии */
+  --r-lg: 26px;
+  --r-md: 18px;
+  --r-sm: 13px;
+  --border-w: 2.5px;
+  --shadow-offset: 6px;
+
+  --font-display: 'Unbounded', 'Manrope', system-ui, sans-serif;
+  --font-body: 'Manrope', system-ui, -apple-system, sans-serif;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html,
+body {
+  min-height: 100vh;
+  font-family: var(--font-body);
+  color: var(--ink);
+  background-color: var(--paper);
+}
+
+body {
+  padding: 18px;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  /* Атмосфера: мягкие дуотон-пятна по углам (риcographic blobs) */
+  background-image:
+    radial-gradient(circle at 10% 4%, rgba(255, 90, 60, 0.14), transparent 38%),
+    radial-gradient(circle at 92% 96%, rgba(43, 46, 168, 0.12), transparent 42%);
+  background-attachment: fixed;
+}
+
+/* Зерно поверх всего — печатная фактура */
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  pointer-events: none;
+  opacity: 0.06;
+  mix-blend-mode: multiply;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+#root {
+  max-width: 560px;
+  margin: 0 auto;
+}
+
+/* ── Keyframes ──
+   Вход карточек/плиток/секций оркеструет Motion (см. App.tsx, ResultView.tsx).
+   Чисто-CSS лупы (spin/shake/dots/bob) перенесены в свои *.module.css:
+   CSS Modules скоупит имя в `animation`, поэтому глобальный @keyframes
+   не находился и анимации (в т.ч. спиннер проверки) не работали. */
+
+/* Доступность: гасим анимации, мгновенно показывая конечное состояние
+   (fill-mode both сохраняет финальный кадр — наклон стикеров и видимость). */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
