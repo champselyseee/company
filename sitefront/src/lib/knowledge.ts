@@ -16,6 +16,8 @@ export interface KBStats {
   arguments: number
   problems: number
   top_works: number
+  strategies: number
+  anti_mistakes: number
   modes: number
 }
 
@@ -76,6 +78,38 @@ export interface KBProblem {
   also_fits_tags: string[]
 }
 
+/* ТОП-20 произведений: work — название, topics — темы-чипы,
+   badge — ярлык уровня, frequency — как часто встречается на ЕГЭ. */
+export interface KBTopWork {
+  work: string
+  author: string
+  topics: string[]
+  badge: string
+  frequency: string
+}
+
+/* Группа внутри стратегии: заголовок + список пунктов (произведения/аргументы). */
+export interface KBStrategyGroup {
+  label: string
+  items: string[]
+}
+
+/* Стратегия подготовки: план под конкретный запас времени до экзамена. */
+export interface KBStrategy {
+  id: string
+  title: string
+  intro: string
+  groups: KBStrategyGroup[]
+  tip: string
+}
+
+/* Блок антиошибок: категория ошибок + список того, чего не делать. */
+export interface KBAntiMistake {
+  id: string
+  title: string
+  items: string[]
+}
+
 export interface KnowledgeBase {
   meta: KBMeta
   modes: KBMode[]
@@ -83,6 +117,9 @@ export interface KnowledgeBase {
   ui_hints: KBUiHints
   arguments: KBArgument[]
   problems: KBProblem[]
+  top_works: KBTopWork[]
+  strategies: KBStrategy[]
+  anti_mistakes: KBAntiMistake[]
 }
 
 /* JSON приходит со слишком широким выводом типов — приводим к нашей модели. */
@@ -95,9 +132,18 @@ export const KB_UI = kb.ui_hints
 export const KB_CATEGORIES = kb.argument_categories
 export const KB_ARGUMENTS = kb.arguments
 export const KB_PROBLEMS = kb.problems
+export const KB_TOP_WORKS = kb.top_works
+export const KB_STRATEGIES = kb.strategies
+export const KB_ANTI_MISTAKES = kb.anti_mistakes
 
-/* Вкладки, под которые в базе есть реальные данные. Остальные показывают «Скоро». */
-export const MODES_WITH_DATA = new Set(['all_arguments', 'by_problems'])
+/* Вкладки, под которые в базе есть реальные данные. Сейчас наполнены все пять. */
+export const MODES_WITH_DATA = new Set([
+  'all_arguments',
+  'by_problems',
+  'top20',
+  'strategies',
+  'anti_mistakes',
+])
 
 /* Поиск по аргументам: title + source + text + tags, регистронезависимо. */
 export function searchArguments(items: KBArgument[], query: string): KBArgument[] {

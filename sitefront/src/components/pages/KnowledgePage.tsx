@@ -3,19 +3,25 @@ import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
 import { Button } from '../ui/Button'
 import { useCountUp } from '../../lib/useCountUp'
 import {
+  KB_ANTI_MISTAKES,
   KB_ARGUMENTS,
   KB_CATEGORIES,
   KB_META,
   KB_MODES,
   KB_PROBLEMS,
+  KB_STRATEGIES,
+  KB_TOP_WORKS,
   KB_UI,
   MODES_WITH_DATA,
   filterByCategory,
   searchArguments,
+  type KBAntiMistake,
   type KBArgument,
   type KBLiteraryArgument,
   type KBHistoricalArgument,
   type KBProblem,
+  type KBStrategy,
+  type KBTopWork,
 } from '../../lib/knowledge'
 import {
   IconArrowRight,
@@ -133,6 +139,9 @@ export function KnowledgePage() {
           />
         )}
         {mode === 'by_problems' && <ProblemsTab />}
+        {mode === 'top20' && <Top20Tab />}
+        {mode === 'strategies' && <StrategiesTab />}
+        {mode === 'anti_mistakes' && <AntiMistakesTab />}
         {!MODES_WITH_DATA.has(mode) && (
           <ComingSoon
             title={KB_MODES.find((m) => m.id === mode)?.label ?? 'Раздел'}
@@ -472,6 +481,196 @@ function Block({
 
 function SubHead({ children }: { children: React.ReactNode }) {
   return <h3 className={styles.subHead}>{children}</h3>
+}
+
+/* ────────────────────────────────────────
+   Вкладка «ТОП-20 произведений»
+   ──────────────────────────────────────── */
+function Top20Tab() {
+  return (
+    <div>
+      <h2 className={styles.h2}>ТОП-20 произведений</h2>
+      <p className={styles.hint}>
+        Обязательный минимум. Выучи эти произведения — они закрывают большинство тем сочинения.
+        Одно сильное произведение работает сразу под несколько проблем.
+      </p>
+      <div className={styles.topGrid}>
+        {KB_TOP_WORKS.map((w, i) => (
+          <TopWorkCard key={`${w.work}-${i}`} rank={i + 1} work={w} />
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function TopWorkCard({ rank, work }: { rank: number; work: KBTopWork }) {
+  return (
+    <div className={styles.topCard}>
+      <div className={styles.topHead}>
+        <span className={styles.topRank}>{rank}</span>
+        <span className={styles.topTitles}>
+          <span className={styles.topWork}>{work.work}</span>
+          <span className={styles.topAuthor}>{work.author}</span>
+        </span>
+      </div>
+      {work.topics.length > 0 && (
+        <div className={styles.topTopics}>
+          {work.topics.map((t) => (
+            <span key={t} className={styles.tagStatic}>
+              {t}
+            </span>
+          ))}
+        </div>
+      )}
+      <div className={styles.topMeta}>
+        {work.badge && <span className={styles.badge}>{work.badge}</span>}
+        {work.frequency && (
+          <span className={styles.topFreq}>
+            <IconFlame size={13} /> {work.frequency}
+          </span>
+        )}
+      </div>
+    </div>
+  )
+}
+
+/* ────────────────────────────────────────
+   Вкладка «Стратегии подготовки»
+   ──────────────────────────────────────── */
+function StrategiesTab() {
+  return (
+    <div>
+      <h2 className={styles.h2}>Стратегии подготовки</h2>
+      <p className={styles.hint}>
+        Выбери план по времени, которое осталось до экзамена — от экстренного разбора за день
+        до уровня на 90+ баллов.
+      </p>
+      <div className={styles.problemList}>
+        {KB_STRATEGIES.map((s) => (
+          <StrategyCard key={s.id} strategy={s} />
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function StrategyCard({ strategy }: { strategy: KBStrategy }) {
+  const reduce = useReducedMotion()
+  const [open, setOpen] = useState(false)
+  const tip = strategy.tip.replace(/^[^\p{L}]+/u, '').trim()
+  return (
+    <div className={`${styles.problem} ${open ? styles.problemOpen : ''}`}>
+      <button className={styles.problemHead} onClick={() => setOpen((v) => !v)} aria-expanded={open}>
+        <span className={styles.problemId}>{strategy.id}</span>
+        <span className={styles.problemHeadText}>
+          <span className={styles.problemTitle}>{strategy.title}</span>
+          <span className={styles.problemQuestions}>{strategy.intro}</span>
+        </span>
+        <span className={`${styles.argChevron} ${open ? styles.argChevronOpen : ''}`} aria-hidden="true">
+          <IconChevron size={20} />
+        </span>
+      </button>
+
+      <AnimatePresence initial={false}>
+        {open && (
+          <motion.div
+            className={styles.argBodyWrap}
+            initial={reduce ? false : { height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={reduce ? { opacity: 0 } : { height: 0, opacity: 0 }}
+            transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
+          >
+            <div className={styles.problemBody}>
+              {strategy.groups.map((g) => (
+                <div key={g.label}>
+                  <SubHead>{g.label}</SubHead>
+                  <ul className={styles.prepList}>
+                    {g.items.map((it, i) => (
+                      <li key={i}>{it}</li>
+                    ))}
+                  </ul>
+                </div>
+              ))}
+              {tip && (
+                <div className={`${styles.block} ${styles.blockIndigo}`}>
+                  <span className={styles.blockLabel}>
+                    <IconSparkles size={13} /> Совет
+                  </span>
+                  <p className={styles.blockText}>{tip}</p>
+                </div>
+              )}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  )
+}
+
+/* ────────────────────────────────────────
+   Вкладка «Антиошибки»
+   ──────────────────────────────────────── */
+function AntiMistakesTab() {
+  return (
+    <div>
+      <h2 className={styles.h2}>Антиошибки</h2>
+      <p className={styles.hint}>
+        Частые ошибки, из-за которых теряют баллы: путаница авторов и героев, слабая аргументация,
+        оформление. Пробегись по списку перед экзаменом.
+      </p>
+      <div className={styles.problemList}>
+        {KB_ANTI_MISTAKES.map((block) => (
+          <AntiMistakeCard key={block.id} block={block} />
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function AntiMistakeCard({ block }: { block: KBAntiMistake }) {
+  const reduce = useReducedMotion()
+  const [open, setOpen] = useState(false)
+  return (
+    <div className={`${styles.problem} ${open ? styles.problemOpen : ''}`}>
+      <button className={styles.problemHead} onClick={() => setOpen((v) => !v)} aria-expanded={open}>
+        <span className={styles.problemIdWarn} aria-hidden="true">
+          <IconClose size={22} />
+        </span>
+        <span className={styles.problemHeadText}>
+          <span className={styles.problemTitle}>{block.title}</span>
+          <span className={styles.problemQuestions}>{block.items.length} ошибок</span>
+        </span>
+        <span className={`${styles.argChevron} ${open ? styles.argChevronOpen : ''}`} aria-hidden="true">
+          <IconChevron size={20} />
+        </span>
+      </button>
+
+      <AnimatePresence initial={false}>
+        {open && (
+          <motion.div
+            className={styles.argBodyWrap}
+            initial={reduce ? false : { height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={reduce ? { opacity: 0 } : { height: 0, opacity: 0 }}
+            transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
+          >
+            <div className={styles.problemBody}>
+              <ul className={styles.mistakeList} style={{ marginTop: 16 }}>
+                {block.items.map((m, i) => (
+                  <li key={i}>
+                    <span className={styles.mistakeMark} aria-hidden="true">
+                      <IconClose size={14} />
+                    </span>
+                    <span>{m}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  )
 }
 
 /* ────────────────────────────────────────

@@ -660,3 +660,124 @@
   color: var(--ink-soft);
   margin-bottom: 6px;
 }
+
+/* ── ТОП-20 произведений ── */
+.topGrid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+}
+@media (min-width: 640px) {
+  .topGrid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+@media (min-width: 1000px) {
+  .topGrid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+.topCard {
+  background: var(--paper-card);
+  border: 2.5px solid var(--ink);
+  border-radius: var(--r-md);
+  box-shadow: 4px 4px 0 var(--ink);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  align-self: start;
+}
+.topHead {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.topRank {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  background: var(--indigo);
+  color: var(--on-accent);
+  border: 2.5px solid var(--ink);
+  border-radius: 12px;
+  box-shadow: 2px 2px 0 var(--ink);
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 16px;
+  font-variant-numeric: tabular-nums;
+}
+.topTitles {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.topWork {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 16px;
+  line-height: 1.15;
+  color: var(--ink);
+}
+.topAuthor {
+  font-size: 13px;
+  color: var(--ink-soft);
+}
+.topTopics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.topMeta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: auto;
+}
+.topFreq {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--coral-deep);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+/* ── Списки в стратегиях ── */
+.prepList {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.prepList li {
+  padding: 10px 14px;
+  background: var(--paper-2);
+  border: 2px solid var(--ink);
+  border-radius: var(--r-sm);
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--ink);
+}
+
+/* ── Значок-иконка для блоков антиошибок (вариант .problemId) ── */
+.problemIdWarn {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 46px;
+  height: 46px;
+  background: var(--coral);
+  color: var(--on-accent);
+  border: 2.5px solid var(--ink);
+  border-radius: 12px;
+  box-shadow: 2px 2px 0 var(--ink);
+}
