@@ -64,6 +64,7 @@ export function ResultView({ type, result }: { type: WorkType; result?: Structur
         <div className={styles.heroLabel}>Итоговый балл</div>
         <ScoreCounter target={data.score} max={data.max_score} />
         <div className={styles.heroType}>{resultLabel}</div>
+        <img className={styles.heroBear} src="/bear.png" alt="" aria-hidden="true" />
       </div>
 
       <ErrorLegend segments={data.segments} />

@@ -226,6 +226,7 @@ export function CheckPage({
           >
             <IconCheck size={30} />
           </motion.div>
+          <img className={styles.heroBear} src="/bear.png" alt="" />
         </div>
       </section>
 

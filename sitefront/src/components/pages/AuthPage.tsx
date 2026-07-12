@@ -148,6 +148,7 @@ export function AuthPage({
             ))}
           </ul>
           <ChecksSticker total={totalChecks} />
+          <img className={styles.asideBear} src="/bear.png" alt="" />
         </motion.aside>
 
         {/* Форма */}

@@ -26,6 +26,19 @@
   border-radius: var(--r-lg);
   box-shadow: var(--shadow-offset) var(--shadow-offset) 0 var(--ink);
   padding: 32px 28px;
+  position: relative;
+  overflow: hidden;
+}
+/* Медведь-«встречающий» в углу панели (только декор) */
+.asideBear {
+  position: absolute;
+  right: -8px;
+  bottom: -6px;
+  width: 158px;
+  height: auto;
+  pointer-events: none;
+  transform: rotate(3deg);
+  filter: drop-shadow(3px 4px 0 rgba(28, 22, 16, 0.22));
 }
 @media (min-width: 860px) {
   .aside {

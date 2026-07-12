@@ -91,9 +91,7 @@ export function Header({
             onClick={() => go('check')}
             aria-label="На главную"
           >
-            <span className={styles.mark} aria-hidden="true">
-              <IconCheck size={20} />
-            </span>
+            <img className={styles.mark} src="/bear.png" alt="" aria-hidden="true" />
             <span className={styles.brandText}>
               ЕГЭ<span className={styles.brandAccent}>-чекер</span>
             </span>

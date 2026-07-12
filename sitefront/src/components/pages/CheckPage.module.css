@@ -125,6 +125,17 @@
   padding: 16px;
   z-index: 3;
 }
+/* Медведь-маскот в геро-зоне (декор): карточки-оценки парят вокруг него */
+.heroBear {
+  position: absolute;
+  left: 44%;
+  bottom: -4%;
+  width: 182px;
+  height: auto;
+  z-index: 2;
+  transform: rotate(-3deg);
+  filter: drop-shadow(4px 6px 0 rgba(28, 22, 16, 0.16));
+}
 
 /* ── Статистика ── */
 .statsWrap {

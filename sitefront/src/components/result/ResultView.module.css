@@ -54,6 +54,20 @@
   text-align: center;
   margin-bottom: 22px;
   background: var(--coral); /* перекрывается инлайном по результату */
+  position: relative;
+  overflow: hidden;
+}
+/* Медведь-«выглядывает» из угла карточки с итоговым баллом (декор) */
+.heroBear {
+  position: absolute;
+  right: -6px;
+  bottom: -8px;
+  width: 84px;
+  height: auto;
+  pointer-events: none;
+  transform: rotate(4deg);
+  filter: drop-shadow(2px 3px 0 rgba(28, 22, 16, 0.18));
+  z-index: 1;
 }
 
 .heroLabel {
