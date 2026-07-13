@@ -42,12 +42,16 @@ function checksMilestone(n: number): number {
 export function AuthPage({
   onToast,
   onAuth,
+  initialMode = 'login',
 }: {
   onToast: (text: string, kind?: ToastKind) => void
   onAuth: (user: User) => void
+  // С какой вкладки открыть форму: «Вход» (по умолчанию) или «Регистрация».
+  // Передаётся из App, когда на страницу ведёт кнопка из блока-приглашения.
+  initialMode?: Mode
 }) {
   const reduce = useReducedMotion()
-  const [mode, setMode] = useState<Mode>('login')
+  const [mode, setMode] = useState<Mode>(initialMode)
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')

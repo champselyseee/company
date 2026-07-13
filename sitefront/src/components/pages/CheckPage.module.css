@@ -137,6 +137,134 @@
   filter: drop-shadow(4px 6px 0 rgba(28, 22, 16, 0.16));
 }
 
+/* ── Приглашение для гостя (регистрация = бесплатная проверка) ── */
+.guestWrap {
+  padding-block: 6px 12px;
+}
+.guestCard {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  background: var(--indigo);
+  color: var(--on-accent);
+  border: var(--border-w) solid var(--ink);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-offset) var(--shadow-offset) 0 var(--ink);
+  padding: 26px 24px;
+}
+@media (min-width: 768px) {
+  .guestCard {
+    padding: 30px 34px;
+  }
+}
+.guestText {
+  flex: 1 1 320px;
+  min-width: 0;
+}
+.guestEyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 12px;
+  background: var(--yellow);
+  color: var(--ink);
+  border: 2px solid var(--ink);
+  border-radius: 999px;
+  box-shadow: 2px 2px 0 var(--ink);
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 11.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+.guestTitle {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: clamp(21px, 3.2vw, 30px);
+  line-height: 1.12;
+  letter-spacing: -0.3px;
+  margin-top: 14px;
+  color: var(--on-accent);
+}
+.guestAccent {
+  color: var(--yellow);
+}
+.guestLead {
+  margin-top: 12px;
+  font-size: 15px;
+  line-height: 1.55;
+  color: rgba(255, 247, 236, 0.86);
+  max-width: 46ch;
+}
+
+/* Две одинаковые по стилю кнопки; у «Регистрации» — бейдж-стикер про бесплатную проверку. */
+.guestActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  flex-shrink: 0;
+}
+.guestBtn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  min-width: 172px;
+  padding: 16px 24px;
+  background: var(--paper-card);
+  color: var(--ink);
+  border: var(--border-w) solid var(--ink);
+  border-radius: var(--r-md);
+  box-shadow: 5px 5px 0 var(--ink);
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 16px;
+  cursor: pointer;
+  transition:
+    transform 0.12s cubic-bezier(0.3, 1.4, 0.5, 1),
+    box-shadow 0.12s ease,
+    background 0.18s ease;
+}
+.guestBtn:hover {
+  transform: translate(-1px, -1px);
+  box-shadow: 6px 6px 0 var(--ink);
+  background: var(--yellow);
+}
+.guestBtn:active {
+  transform: translate(5px, 5px);
+  box-shadow: 0 0 0 var(--ink);
+}
+.guestBadge {
+  position: absolute;
+  top: -13px;
+  right: -10px;
+  padding: 4px 9px;
+  background: var(--coral);
+  color: var(--on-accent);
+  border: 2px solid var(--ink);
+  border-radius: 999px;
+  box-shadow: 2px 2px 0 var(--ink);
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 10.5px;
+  letter-spacing: 0.2px;
+  white-space: nowrap;
+  transform: rotate(4deg);
+  pointer-events: none;
+}
+@media (max-width: 560px) {
+  .guestActions {
+    width: 100%;
+  }
+  .guestBtn {
+    flex: 1 1 100%;
+    min-width: 0;
+  }
+}
+
 /* ── Статистика ── */
 .statsWrap {
   padding-block: 18px 30px;

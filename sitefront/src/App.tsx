@@ -24,6 +24,9 @@ export function App() {
   const [user, setUser] = useState<User | null>(null)
   // Выбранный для оплаты тариф (пакет или подписка).
   const [selectedOffer, setSelectedOffer] = useState<PurchaseOffer | null>(null)
+  // С какой вкладки открыть страницу авторизации: «Вход» или «Регистрация».
+  // Меняется, когда гость жмёт кнопку из блока-приглашения на главной.
+  const [authMode, setAuthMode] = useState<'login' | 'register'>('login')
   const reduce = useReducedMotion()
   const mainRef = useRef<HTMLElement>(null)
   const firstRender = useRef(true)
@@ -68,6 +71,12 @@ export function App() {
   const buyOffer = useCallback((offer: PurchaseOffer) => {
     setSelectedOffer(offer)
     setPage('checkout')
+  }, [])
+
+  // Открыть авторизацию на нужной вкладке (из блока-приглашения на главной).
+  const goAuth = useCallback((mode: 'login' | 'register') => {
+    setAuthMode(mode)
+    setPage('auth')
   }, [])
 
   // Оплата подтверждена сервером без внешнего редиректа — обновляем баланс из профиля.
@@ -129,7 +138,7 @@ export function App() {
         )
       case 'auth':
         return (
-          <AuthPage onToast={notify} onAuth={handleAuth} />
+          <AuthPage onToast={notify} onAuth={handleAuth} initialMode={authMode} />
         )
       case 'check':
       default:
@@ -138,6 +147,8 @@ export function App() {
             onToast={notify}
             onNavigate={setPage}
             onBalanceChange={handleBalanceChange}
+            isAuthed={isAuthed}
+            onAuth={goAuth}
           />
         )
     }

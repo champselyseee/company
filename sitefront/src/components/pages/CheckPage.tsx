@@ -14,11 +14,13 @@ import {
   IconBolt,
   IconCamera,
   IconCheck,
+  IconLogin,
   IconMail,
   IconPen,
   IconSparkles,
   IconTarget,
   IconUpload,
+  IconUser,
 } from '../../lib/icons'
 import type { ToastKind } from '../ui/Toast'
 import styles from './CheckPage.module.css'
@@ -64,10 +66,15 @@ export function CheckPage({
   onToast,
   onNavigate,
   onBalanceChange,
+  isAuthed,
+  onAuth,
 }: {
   onToast: (text: string, kind?: ToastKind) => void
   onNavigate: (p: Page) => void
   onBalanceChange: (balance: number) => void
+  // Гость (не залогинен) видит блок-приглашение; onAuth открывает нужную вкладку.
+  isAuthed: boolean
+  onAuth: (mode: 'login' | 'register') => void
 }) {
   const reduce = useReducedMotion()
   // Публичный счётчик проверок для первой плитки статистики. null — ещё не загрузили
@@ -229,6 +236,52 @@ export function CheckPage({
           <img className={styles.heroBear} src="/bear.png" alt="" />
         </div>
       </section>
+
+      {/* ── Приглашение для гостя: регистрация даёт бесплатную проверку ── */}
+      {!isAuthed && (
+        <section className={`container ${styles.guestWrap}`}>
+          <motion.div
+            className={styles.guestCard}
+            initial={reduce ? false : { opacity: 0, y: 18 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ type: 'spring', stiffness: 220, damping: 24, delay: 0.1 }}
+          >
+            <div className={styles.guestText}>
+              <span className={styles.guestEyebrow}>
+                <IconSparkles size={15} /> Бесплатная проверка при регистрации
+              </span>
+              <h2 className={styles.guestTitle}>
+                Войди или зарегистрируйся — и получи{' '}
+                <span className={styles.guestAccent}>бесплатную проверку</span>
+              </h2>
+              <p className={styles.guestLead}>
+                Начни свою подготовку к ЕГЭ с ЭкспертЕГЭ: первая проверка эссе или
+                сочинения — бесплатно.
+              </p>
+            </div>
+
+            <div className={styles.guestActions}>
+              <button
+                type="button"
+                className={`${styles.guestBtn} ${styles.guestBtnReg}`}
+                onClick={() => onAuth('register')}
+              >
+                <IconUser size={20} />
+                Регистрация
+                <span className={styles.guestBadge}>бесплатная проверка</span>
+              </button>
+              <button
+                type="button"
+                className={`${styles.guestBtn} ${styles.guestBtnLogin}`}
+                onClick={() => onAuth('login')}
+              >
+                <IconLogin size={20} />
+                Вход
+              </button>
+            </div>
+          </motion.div>
+        </section>
+      )}
 
       {/* ── Полоса статистики ── */}
       <section className={`container ${styles.statsWrap}`}>
