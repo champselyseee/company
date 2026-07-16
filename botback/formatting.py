@@ -24,9 +24,6 @@ def format_result(work_type: str, result_json: str) -> str:
     except (ValueError, TypeError):
         return result_json[:_TELEGRAM_LIMIT]
 
-    if not isinstance(data, dict):
-        return result_json[:_TELEGRAM_LIMIT]
-
     name = WORK_TYPE_NAMES.get(work_type, work_type)
     lines = [f"✅ Проверка: {name}", ""]
 
@@ -35,8 +32,6 @@ def format_result(work_type: str, result_json: str) -> str:
         lines.append("")
 
     for crit in data.get("criteria", []):
-        if not isinstance(crit, dict):
-            continue
         code = crit.get("code", "")
         score = crit.get("score", "")
         maximum = crit.get("max", "")

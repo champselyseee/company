@@ -14,8 +14,6 @@ WORK_TYPES = [
 def work_type_keyboard() -> InlineKeyboardMarkup:
     """Inline-клавиатура выбора типа работы."""
     return InlineKeyboardMarkup(
-        [[InlineKeyboardButton(label, callback_data=f"type:{key}") for key, label in WORK_TYPES]]
-    ) if False else InlineKeyboardMarkup(
         [[InlineKeyboardButton(label, callback_data=f"type:{key}")] for key, label in WORK_TYPES]
     )
 
