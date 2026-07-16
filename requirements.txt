@@ -13,3 +13,6 @@ email-validator>=2.1
 itsdangerous>=2.2
 bcrypt>=4.1
 httpx>=0.27
+
+# botback/ — Telegram-бот:
+python-telegram-bot>=21.6
