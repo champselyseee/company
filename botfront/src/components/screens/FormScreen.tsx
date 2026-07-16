@@ -17,7 +17,6 @@ export interface FormState {
 }
 
 interface Props {
-  token: string
   form: FormState
   error: { text: string; id: number } | null
   onSelectType: (type: WorkType) => void
@@ -30,7 +29,6 @@ interface Props {
 }
 
 export function FormScreen({
-  token,
   form,
   error,
   onSelectType,
@@ -49,7 +47,7 @@ export function FormScreen({
         <p>Тип → фото задания → текст</p>
       </div>
 
-      <StatsStrip token={token} />
+      <StatsStrip />
 
       {error ? <ErrorBanner key={error.id} message={error.text} /> : null}
 
@@ -60,7 +58,6 @@ export function FormScreen({
         photos={form.photos}
         onChange={onPhotosChange}
         onError={onError}
-        token={token}
         onRecognized={onRecognized}
       />
 

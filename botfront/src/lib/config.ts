@@ -1,14 +1,10 @@
-// Адрес Railway-сервиса. Переопределяется переменной окружения VITE_BACKEND_URL
-// при сборке (см. .env.example). Дефолт — бэкенд зеркала (backendmirrr).
+// Адрес бэкенда бота (botback на Railway) — веб-сервер мини-аппы.
+// Задаётся переменной сборки VITE_BACKEND_URL (Vercel env). Без хвостовых слешей.
+// В проде ОБЯЗАТЕЛЬНО задать — иначе запросы пойдут на тот же хост, что и фронт.
 export const BACKEND_URL: string =
-  (import.meta.env.VITE_BACKEND_URL as string | undefined)?.replace(/\/+$/, '') ||
-  'https://backendmirrr-production.up.railway.app'
+  (import.meta.env.VITE_BACKEND_URL as string | undefined)?.replace(/\/+$/, '') || ''
 
-// Токен из query-параметра ?token=... (выдаётся ботом при открытии WebApp).
-export const URL_TOKEN: string =
-  new URLSearchParams(window.location.search).get('token') || ''
-
-// Лимиты, согласованные с бэкендом (bot.py).
+// Лимиты, согласованные с бэкендом.
 export const MAX_FILE_BYTES = 8 * 1024 * 1024 // 8 МБ
 export const MAX_PHOTOS = 2
 export const MIN_TEXT_LENGTH = 50

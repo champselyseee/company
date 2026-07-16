@@ -9,14 +9,14 @@ const FALLBACK_TOTAL = 12480
 
 /* Полоса счётчиков на форме: общий счётчик проверок (всегда) + личный счётчик
    пользователя (если бэкенд его вернул). Числа плавно «докручиваются» от нуля. */
-export function StatsStrip({ token }: { token: string }) {
+export function StatsStrip() {
   const [total, setTotal] = useState<number | null>(null)
   const [mine, setMine] = useState<number | null>(null)
 
   useEffect(() => {
     let alive = true
     const ctrl = new AbortController()
-    fetchStats(token, ctrl.signal).then((s) => {
+    fetchStats(ctrl.signal).then((s) => {
       if (!alive) return
       setTotal(s.total)
       setMine(s.mine)
@@ -25,7 +25,7 @@ export function StatsStrip({ token }: { token: string }) {
       alive = false
       ctrl.abort()
     }
-  }, [token])
+  }, [])
 
   const totalCount = useCountUp(total ?? FALLBACK_TOTAL)
   const mineCount = useCountUp(mine ?? 0)

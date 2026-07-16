@@ -1,29 +1,22 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
 import type { AttachedFile, Screen, WorkType } from './lib/types'
-import { URL_TOKEN } from './lib/config'
-import { checkToken, submitProxy } from './lib/api'
-import { notify } from './lib/telegram'
+import { MIN_TEXT_LENGTH } from './lib/config'
+import { submitProxy } from './lib/api'
+import { notify, tg } from './lib/telegram'
 import { DEMO_RESULTS, getDemoType } from './lib/demo'
 import { CheckingScreen } from './components/screens/CheckingScreen'
 import { NoAccessScreen } from './components/screens/NoAccessScreen'
 import { LoadingScreen } from './components/screens/LoadingScreen'
 import { FormScreen, type FormState } from './components/screens/FormScreen'
 import { ResultScreen } from './components/screens/ResultScreen'
-import { MIN_TEXT_LENGTH } from './lib/config'
 
-const NO_TOKEN_MSG = 'Ссылка устарела или повреждена.\nНажми /start в боте для новой кнопки.'
-const USED_TOKEN_MSG =
-  'Сессия истекла или уже использована.\nДожидайся новой кнопки от бота — она придёт автоматически после проверки.\nИли нажми /start чтобы получить новую.'
-const SERVER_DOWN_MSG =
-  'Сервер не отвечает (Railway cold start).\nЗакрой WebApp, подожди 30–60 сек и нажми кнопку снова.'
-
-const delay = (ms: number) => new Promise((r) => setTimeout(r, ms))
+const NOT_IN_TG_MSG =
+  'Открой приложение через кнопку в боте.\nНажми /start и выбери «✍️ Открыть проверку».'
 
 export function App() {
   const [screen, setScreen] = useState<Screen>('checking')
-  const [checkingMessage, setCheckingMessage] = useState('Загружаем')
-  const [noAccessMessage, setNoAccessMessage] = useState(USED_TOKEN_MSG)
+  const [noAccessMessage, setNoAccessMessage] = useState(NOT_IN_TG_MSG)
   const [error, setError] = useState<{ text: string; id: number } | null>(null)
   const [result, setResult] = useState<{ text: string; type: WorkType } | null>(null)
 
@@ -36,7 +29,8 @@ export function App() {
 
   const errorTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const errorId = useRef(0)
-  const tokenCheckStarted = useRef(false)
+  const startedRef = useRef(false)
+  const submitting = useRef(false)
   const reduceMotion = useReducedMotion()
 
   const showError = useCallback((text: string) => {
@@ -52,59 +46,27 @@ export function App() {
     setScreen('noaccess')
   }, [])
 
-  // ── Проверка токена при старте (до 3 попыток — Railway cold start ~30 сек) ──
+  // ── Старт: мини-аппа впускает в UI свободно (без токенов) ──
   useEffect(() => {
-    if (tokenCheckStarted.current) return
-    tokenCheckStarted.current = true
+    if (startedRef.current) return
+    startedRef.current = true
 
-    let cancelled = false
-
-    async function run() {
-      // DEV-демо: ?demo=1 → сразу показать экран результата с примером (без бэкенда).
-      if (import.meta.env.DEV) {
-        const demoType = getDemoType()
-        if (demoType) {
-          setResult({ text: DEMO_RESULTS[demoType], type: demoType })
-          setScreen('result')
-          return
-        }
-      }
-      if (!URL_TOKEN) {
-        // В dev-режиме без токена открываем форму, чтобы можно было тыкать UI
-        // без Telegram и валидного токена. В проде ведёт себя как раньше.
-        if (import.meta.env.DEV) {
-          setScreen('form')
-        } else {
-          showNoAccess(NO_TOKEN_MSG)
-        }
+    // DEV-демо: ?demo=1 → сразу экран результата с примером (без бэкенда).
+    if (import.meta.env.DEV) {
+      const demoType = getDemoType()
+      if (demoType) {
+        setResult({ text: DEMO_RESULTS[demoType], type: demoType })
+        setScreen('result')
         return
-      }
-      for (let attempt = 0; attempt < 3; attempt++) {
-        try {
-          const ok = await checkToken(URL_TOKEN, AbortSignal.timeout(20000))
-          if (cancelled) return
-          if (ok) {
-            setScreen('form')
-          } else {
-            showNoAccess(USED_TOKEN_MSG)
-          }
-          return
-        } catch {
-          if (cancelled) return
-          if (attempt < 2) {
-            setCheckingMessage(`Сервер запускается (${attempt + 1}/2)`)
-            await delay(15000)
-            if (cancelled) return
-          } else {
-            showNoAccess(SERVER_DOWN_MSG)
-          }
-        }
       }
     }
 
-    void run()
-    return () => {
-      cancelled = true
+    // Есть initData (приложение открыто внутри Telegram) → сразу форма.
+    // Вход свободный: проверку и списание бэкенд делает уже при «Отправить».
+    if (tg.initData || import.meta.env.DEV) {
+      setScreen('form')
+    } else {
+      showNoAccess(NOT_IN_TG_MSG)
     }
   }, [showNoAccess])
 
@@ -114,7 +76,7 @@ export function App() {
     }
   }, [])
 
-  // Прокрутка наверх при каждой смене экрана (как в оригинале).
+  // Прокрутка наверх при каждой смене экрана.
   useEffect(() => {
     window.scrollTo(0, 0)
   }, [screen])
@@ -149,45 +111,47 @@ export function App() {
       return
     }
 
+    // Защита от двойного нажатия: одна проверка = одно списание.
+    if (submitting.current) return
+    submitting.current = true
+
     setScreen('loading')
     try {
-      const answer = await submitProxy({
-        token: URL_TOKEN,
-        type: selectedType,
-        text,
-        photos,
-        file,
-      })
+      const answer = await submitProxy({ type: selectedType, text, photos, file })
       setResult({ text: answer, type: selectedType })
       setScreen('result')
       notify('success')
     } catch (e) {
       setScreen('form')
       let msg = e instanceof Error ? e.message : String(e)
-      if (msg.includes('invalid_token') || msg.includes('403')) {
-        msg = 'Сессия истекла. Дождись новой кнопки от бота или нажми /start.'
-      } else if (msg.includes('xAI error') || msg.includes('502')) {
-        msg = 'ИИ временно недоступен. Попробуй через несколько минут.'
-      } else if (msg.includes('429')) {
-        msg = 'Слишком много запросов. Попробуй через минуту.'
-      } else if (msg.includes('empty_work')) {
-        msg = 'Введи текст или прикрепи файл.'
+      if (msg === 'no_checks') {
+        msg = 'Проверки закончились. Пополни баланс в боте (/buy).'
+      } else if (msg === 'unauthorized') {
+        msg = 'Сессия не подтверждена. Открой приложение через кнопку в боте.'
+      } else if (msg === 'empty_work') {
+        msg = 'Введи текст или прикрепи фото/файл.'
+      } else if (msg === 'unknown_type') {
+        msg = 'Выбери тип работы.'
+      } else if (msg === 'bad_json' || msg === 'server_error') {
+        msg = 'Ошибка сервера. Попробуй ещё раз.'
       } else if (
         msg.includes('Failed to fetch') ||
         msg.includes('NetworkError') ||
-        msg.includes('500') ||
-        msg.includes('AbortError')
+        msg.includes('AbortError') ||
+        msg.includes('HTTP 5')
       ) {
         msg = 'Сервер не отвечает. Подожди 30–60 секунд и попробуй снова.'
       }
       showError('❌ ' + msg)
+    } finally {
+      submitting.current = false
     }
   }
 
   function renderScreen() {
     switch (screen) {
       case 'checking':
-        return <CheckingScreen message={checkingMessage} />
+        return <CheckingScreen message="Загружаем" />
       case 'noaccess':
         return <NoAccessScreen message={noAccessMessage} />
       case 'loading':
@@ -202,7 +166,6 @@ export function App() {
       default:
         return (
           <FormScreen
-            token={URL_TOKEN}
             form={form}
             error={error}
             onSelectType={onSelectType}
@@ -217,8 +180,6 @@ export function App() {
     }
   }
 
-  // Плавные переходы между экранами. mode="wait" — уходящий экран завершает
-  // exit, затем входит новый. Уважает prefers-reduced-motion.
   const enter = reduceMotion
     ? { initial: false, animate: { opacity: 1 }, exit: { opacity: 1 } }
     : {

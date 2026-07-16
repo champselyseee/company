@@ -9,8 +9,10 @@ initData (подписанные данные WebApp), без токенов. Д
 from __future__ import annotations
 
 import asyncio
+import base64
 import hashlib
 import hmac
+import io
 import json
 import logging
 import time
@@ -110,6 +112,36 @@ async def _auth(request) -> dict | None:
     )
 
 
+def _extract_file_text(file) -> tuple[str | None, str | None]:
+    """(file_name, file_text) из вложения мини-аппы. PDF → pypdf, text/* → decode.
+
+    Что не смогли разобрать — молча игнорируем (file_text=None), не падаем.
+    """
+    if not isinstance(file, dict):
+        return None, None
+    name = file.get("name") or "файл"
+    data_url = file.get("data") or ""
+    if "," not in data_url:
+        return name, None
+    try:
+        raw = base64.b64decode(data_url.split(",", 1)[1])
+    except Exception:
+        return name, None
+    ctype = (file.get("type") or "").lower()
+    lname = name.lower()
+    if "pdf" in ctype or lname.endswith(".pdf"):
+        try:
+            from pypdf import PdfReader
+            reader = PdfReader(io.BytesIO(raw))
+            text = "\n".join((p.extract_text() or "") for p in reader.pages).strip()
+            return name, text or None
+        except Exception:
+            return name, None
+    if ctype.startswith("text/") or lname.endswith(".txt"):
+        return name, raw.decode("utf-8", errors="ignore").strip() or None
+    return name, None
+
+
 # ── Эндпоинты ──
 
 async def handle_options(request):
@@ -148,9 +180,10 @@ async def handle_check(request):
     work_type = body.get("type") or body.get("workType")
     text = (body.get("text") or "").strip()
     photos = body.get("photos") or None
+    file_name, file_text = _extract_file_text(body.get("file"))
     if work_type not in ("email", "essay", "composition"):
         return _json({"error": "unknown_type"}, 400)
-    if not text and not photos:
+    if not text and not photos and not file_text:
         return _json({"error": "empty_work"}, 400)
 
     user_id = user["id"]  # ВНУТРЕННИЙ users.id (не telegram_id)
@@ -159,7 +192,8 @@ async def handle_check(request):
         return _json({"error": "no_checks"}, 402)  # проверки закончились
     try:
         answer = await grok_check.check_work(
-            user_id, work_type, text=text, photos=photos, source="bot"
+            user_id, work_type, text=text, photos=photos,
+            file_name=file_name, file_text=file_text, source="bot",
         )
     except grok_check.GrokCheckError as e:
         await asyncio.to_thread(db.refund_check, user_id, kind)  # ИИ не ответил — вернуть

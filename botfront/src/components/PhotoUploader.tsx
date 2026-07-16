@@ -9,13 +9,11 @@ interface Props {
   photos: string[]
   onChange: (photos: string[]) => void
   onError: (msg: string) => void
-  /** Токен для OCR (распознавание не сжигает токен). */
-  token: string
   /** Вызывается с распознанным текстом, чтобы дописать его в поле работы. */
   onRecognized: (text: string) => void
 }
 
-export function PhotoUploader({ photos, onChange, onError, token, onRecognized }: Props) {
+export function PhotoUploader({ photos, onChange, onError, onRecognized }: Props) {
   const inputRef = useRef<HTMLInputElement>(null)
   const [ocrBusy, setOcrBusy] = useState(false)
 
@@ -46,7 +44,7 @@ export function PhotoUploader({ photos, onChange, onError, token, onRecognized }
     try {
       const parts: string[] = []
       for (const photo of photos) {
-        const text = await recognizePhoto(token, photo)
+        const text = await recognizePhoto(photo)
         if (text) parts.push(text)
       }
       const combined = parts.join('\n\n').trim()
