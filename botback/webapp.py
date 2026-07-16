@@ -30,6 +30,8 @@ except ImportError:  # pragma: no cover
 log = logging.getLogger(__name__)
 
 INIT_DATA_MAX_AGE = 24 * 60 * 60  # initData свежее суток — защита от переигрывания
+# Максимум тела запроса: фото (base64) + PDF-вложение легко превышают дефолтный 1 МБ aiohttp.
+MAX_BODY_SIZE = 16 * 1024 * 1024  # 16 МБ
 
 
 # ── Проверка подписи Telegram WebApp initData ──
@@ -115,7 +117,8 @@ async def _auth(request) -> dict | None:
 def _extract_file_text(file) -> tuple[str | None, str | None]:
     """(file_name, file_text) из вложения мини-аппы. PDF → pypdf, text/* → decode.
 
-    Что не смогли разобрать — молча игнорируем (file_text=None), не падаем.
+    Синхронная (pypdf CPU-bound) — вызывать через asyncio.to_thread. Что не разобрали —
+    молча игнорируем (file_text=None), не падаем.
     """
     if not isinstance(file, dict):
         return None, None
@@ -180,7 +183,8 @@ async def handle_check(request):
     work_type = body.get("type") or body.get("workType")
     text = (body.get("text") or "").strip()
     photos = body.get("photos") or None
-    file_name, file_text = _extract_file_text(body.get("file"))
+    # Разбор вложения (pypdf) CPU-bound — в поток, чтобы не блокировать event loop (на нём polling).
+    file_name, file_text = await asyncio.to_thread(_extract_file_text, body.get("file"))
     if work_type not in ("email", "essay", "composition"):
         return _json({"error": "unknown_type"}, 400)
     if not text and not photos and not file_text:
@@ -224,7 +228,8 @@ async def handle_ocr(request):
 # ── Сборка и запуск сервера ──
 
 def build_app() -> web.Application:
-    app = web.Application()
+    # client_max_size поднят с дефолтного 1 МБ: тело с фото(base64)/PDF бывает больше.
+    app = web.Application(client_max_size=MAX_BODY_SIZE)
     app.router.add_get("/", handle_health)
     app.router.add_get("/api/me", handle_me)
     app.router.add_post("/api/check", handle_check)
