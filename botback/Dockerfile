@@ -22,5 +22,6 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY core/ ./core/
 COPY botback/ ./botback/
 
-# Бот работает по long-polling — веб-сервер не поднимает и порт не слушает.
+# Бот работает по long-polling И поднимает рядом aiohttp-веб-сервер для мини-аппы
+# (эндпоинты initData) — слушает $PORT, поэтому служба на Railway должна быть типа web.
 CMD ["python", "-m", "botback.main"]

@@ -19,6 +19,16 @@ SUPPORT_CONTACT = os.environ.get("SUPPORT_CONTACT", "@champselyseee")
 WHITELIST = {"champselyseee", "dilaiip", "riavlw", "ENOTINA0", "ssmatwikss"}
 
 
+# ── Мини-аппа (Telegram WebApp) ──
+# Адрес мини-аппы (botfront на Vercel) — для inline-кнопки WebApp. Пусто → кнопку не показываем.
+WEBAPP_URL = os.environ.get("WEBAPP_URL", "")
+# Порт веб-сервера бота (обслуживает мини-аппу). На Railway задаётся автоматически.
+PORT = int(os.environ.get("PORT", "8080"))
+# Разрешённый источник (CORS) для мини-аппы. '*' допустимо: вход по initData в заголовке,
+# куки не используются.
+WEBAPP_ALLOWED_ORIGIN = os.environ.get("WEBAPP_ALLOWED_ORIGIN", "*")
+
+
 def is_whitelisted(username: str | None) -> bool:
     """True, если username в белом списке (безлимитный доступ, без списания проверок)."""
     return bool(username) and username.lower() in {w.lower() for w in WHITELIST}

@@ -1,6 +1,8 @@
-"""Клавиатуры бота. Пока одна — выбор типа работы для проверки."""
+"""Клавиатуры бота. Выбор типа работы, кнопка «Проверить ещё» и кнопка открытия мини-аппы."""
 
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
+
+from . import config
 
 # Порядок и подписи кнопок выбора типа. Ключи совпадают с core.claude.PROMPTS.
 # callback_data кнопки — "type:<key>" (ловится в handlers/check.py).
@@ -22,4 +24,13 @@ def recheck_keyboard() -> InlineKeyboardMarkup:
     """Кнопка под результатом: начать новую проверку (снова выбрать тип работы)."""
     return InlineKeyboardMarkup(
         [[InlineKeyboardButton("🔁 Проверить ещё", callback_data="recheck")]]
+    )
+
+
+def webapp_keyboard() -> InlineKeyboardMarkup | None:
+    """Кнопка открытия мини-аппы. None, если WEBAPP_URL не задан (тогда кнопку не показываем)."""
+    if not config.WEBAPP_URL:
+        return None
+    return InlineKeyboardMarkup(
+        [[InlineKeyboardButton("✍️ Открыть проверку", web_app=WebAppInfo(url=config.WEBAPP_URL))]]
     )

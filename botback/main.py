@@ -1,11 +1,12 @@
 """Точка входа бэкенда бота: сборка приложения PTB, регистрация хендлеров, запуск.
 
-Бот работает по long-polling (без веб-сервера): веб-эндпоинты (OCR/проверка/вебхуки)
-для сайта и мини-аппа обслуживает siteback, а бот зовёт общий core/ напрямую.
+Бот работает по long-polling И поднимает рядом (в том же процессе) aiohttp-веб-сервер
+для мини-аппы (эндпоинты initData) — см. botback/webapp.py. Общий core/ зовём напрямую.
 
 Запуск: python -m botback.main   (из корня репозитория, чтобы был виден пакет core/)
 """
 
+import asyncio
 import logging
 
 from telegram.ext import (
@@ -18,6 +19,7 @@ from telegram.ext import (
 
 from . import config
 from .handlers import check, commands
+from .webapp import run_web
 
 logging.basicConfig(
     level=logging.INFO,
@@ -52,11 +54,16 @@ def build_application():
     return app
 
 
-def main() -> None:
+async def main() -> None:
+    # Веб-сервер мини-аппы (эндпоинты initData) — в том же процессе и event loop, что и polling.
+    await run_web()
     app = build_application()
-    log.info("Бот запущен (long-polling).")
-    app.run_polling()
+    log.info("Бот запущен (long-polling + веб-сервер мини-аппы).")
+    async with app:
+        await app.start()
+        await app.updater.start_polling()
+        await asyncio.Event().wait()
 
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())

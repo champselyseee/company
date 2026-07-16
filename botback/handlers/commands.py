@@ -9,6 +9,7 @@ from telegram.ext import ContextTypes
 
 from .. import config
 from ..formatting import WORK_TYPE_NAMES
+from ..keyboards import webapp_keyboard
 
 # Общая база из core/. Пробуем как пакет (core.db) и как одиночный модуль (db).
 try:
@@ -28,7 +29,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         "👋 Привет! Я проверю твою работу по критериям ЕГЭ "
         "(письмо и эссе по английскому или сочинение по русскому).\n\n"
         "Первая проверка — бесплатно.\n\n"
-        "Нажми /check, выбери тип работы и пришли текст или фото рукописи."
+        "Открой приложение кнопкой ниже 👇 или нажми /check прямо в чате "
+        "и пришли текст или фото рукописи.",
+        reply_markup=webapp_keyboard(),
     )
 
 
