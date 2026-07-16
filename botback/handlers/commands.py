@@ -54,7 +54,10 @@ async def balance(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         return
     row = await asyncio.to_thread(db.get_or_create_telegram_user, user.id, user.username or None)
     if db.has_subscription(row):
-        await update.message.reply_text("📅 У тебя активна подписка (безлимит).")
+        left = db.subscription_left(row)
+        await update.message.reply_text(
+            f"📅 Подписка активна: осталось {left} из {db.SUBSCRIPTION_MONTHLY_QUOTA} проверок в этом месяце."
+        )
         return
     free_left = 0 if row.get("free_used") else 1
     paid = row.get("paid_checks", 0) or 0

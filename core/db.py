@@ -13,7 +13,6 @@ CLI для проверки:
 """
 
 import os
-import secrets
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -26,7 +25,9 @@ load_dotenv()
 
 DATABASE_URL = os.environ.get("DATABASE_URL")
 SCHEMA_PATH = Path(__file__).with_name("schema.sql")
-TOKEN_TTL_SECONDS = 2 * 60 * 60  # ключ доступа к мини-аппу живёт 2 часа, как в боте
+
+# Месячная норма проверок по активной подписке (сбрасывается каждый календарный месяц).
+SUBSCRIPTION_MONTHLY_QUOTA = 30
 
 _pool: ConnectionPool | None = None
 
@@ -60,10 +61,6 @@ def _conn():
 
 def _now() -> datetime:
     return datetime.now(timezone.utc)
-
-
-def _expired(created_at: datetime) -> bool:
-    return (_now() - created_at).total_seconds() > TOKEN_TTL_SECONDS
 
 
 # ── Схема ──
@@ -122,7 +119,7 @@ def get_user_by_email(email: str) -> dict | None:
 def create_email_user(
     email: str, password_hash: str, display_name: str | None = None
 ) -> dict | None:
-    """Создаёт нового пользователя с email и хешем пароля (регистрация на сайте).
+    """Создаёт нового пользователя с email и хешом пароля (регистрация на сайте).
 
     Атомарно защищено от гонки: если такой email уже есть, ON CONFLICT ничего не
     вставляет и возвращает None (caller отдаёт аккуратную ошибку «email занят»),
@@ -224,35 +221,62 @@ def has_subscription(user: dict) -> bool:
     return su is not None and su > _now()
 
 
+def subscription_left(user: dict) -> int:
+    """Сколько проверок по подписке осталось в текущем календарном месяце (0..квота).
+
+    0 — если подписки нет. Счётчик sub_used обнуляется в начале нового месяца
+    (сравниваем сохранённый sub_month с текущим 'YYYY-MM' по UTC).
+    """
+    if not has_subscription(user):
+        return 0
+    used = user.get("sub_used") or 0
+    if user.get("sub_month") != _now().strftime("%Y-%m"):
+        used = 0
+    return max(0, SUBSCRIPTION_MONTHLY_QUOTA - used)
+
+
 def has_access(user: dict) -> bool:
-    return has_subscription(user) or user.get("paid_checks", 0) > 0
+    return subscription_left(user) > 0 or user.get("paid_checks", 0) > 0
 
 
 def consume_check(user_id: int) -> str | None:
     """Атомарно проверяет доступ и списывает ОДНУ проверку. Возвращает, что списано:
 
-    - "subscription" — покрыто активной подпиской, ничего не списываем;
+    - "subscription" — покрыто активной подпиской в пределах месячной нормы
+      (SUBSCRIPTION_MONTHLY_QUOTA); sub_used += 1, при смене месяца счётчик обнуляется;
     - "free"         — списана бесплатная (free_used стал TRUE);
     - "paid"         — списана одна оплаченная (paid_checks -= 1);
     - None           — списывать нечего (нет доступа) → caller отдаёт 402.
 
     Строка пользователя блокируется (FOR UPDATE) на время транзакции, поэтому два
     одновременных запроса не могут списать одну и ту же проверку (без гонки).
-    Порядок списания: сперва подписка, затем бесплатная, затем оплаченные.
+    Порядок: подписка (месячная норма) → бесплатная → оплаченные.
     """
     with _conn() as conn:
         row = conn.execute(
-            "SELECT free_used, paid_checks, subscription_until FROM users "
-            "WHERE id = %s FOR UPDATE",
+            "SELECT free_used, paid_checks, subscription_until, sub_used, sub_month "
+            "FROM users WHERE id = %s FOR UPDATE",
             (user_id,),
         ).fetchone()
         if row is None:
             conn.rollback()
             return None
+        now = _now()
         su = row["subscription_until"]
-        if su is not None and su > _now():
-            conn.commit()
-            return "subscription"
+        if su is not None and su > now:
+            # Активная подписка: месячная норма SUBSCRIPTION_MONTHLY_QUOTA.
+            current_month = now.strftime("%Y-%m")
+            used = row["sub_used"] or 0
+            if row["sub_month"] != current_month:
+                used = 0  # новый месяц — норма обнуляется
+            if used < SUBSCRIPTION_MONTHLY_QUOTA:
+                conn.execute(
+                    "UPDATE users SET sub_used = %s, sub_month = %s WHERE id = %s",
+                    (used + 1, current_month, user_id),
+                )
+                conn.commit()
+                return "subscription"
+            # месячная норма исчерпана → пробуем бесплатную/оплаченные ниже
         if not row["free_used"]:
             conn.execute("UPDATE users SET free_used = TRUE WHERE id = %s", (user_id,))
             conn.commit()
@@ -270,8 +294,7 @@ def consume_check(user_id: int) -> str | None:
 def refund_check(user_id: int, kind: str) -> None:
     """Возврат проверки, списанной consume_check, если ИИ так и не ответил.
 
-    kind — то, что вернула consume_check. "subscription" ничего не списывала — и
-    возвращать нечего.
+    kind — то, что вернула consume_check: "free"/"paid"/"subscription".
     """
     if kind == "free":
         with _conn() as conn:
@@ -279,71 +302,13 @@ def refund_check(user_id: int, kind: str) -> None:
             conn.commit()
     elif kind == "paid":
         add_paid_checks(user_id, 1)
-
-
-# ── Токены доступа к мини-аппу ──
-
-def delete_expired_tokens() -> int:
-    """Удаляет использованные и просроченные ключи доступа. Возвращает число удалённых."""
-    cutoff = _now() - timedelta(seconds=TOKEN_TTL_SECONDS)
-    with _conn() as conn:
-        cur = conn.execute(
-            "DELETE FROM access_tokens WHERE used = TRUE OR created_at < %s", (cutoff,)
-        )
-        conn.commit()
-        return cur.rowcount
-
-
-def create_token(user_id: int) -> str:
-    token = secrets.token_hex(16)
-    cutoff = _now() - timedelta(seconds=TOKEN_TTL_SECONDS)
-    with _conn() as conn:
-        # заодно подчищаем старьё, чтобы таблица не разрасталась
-        conn.execute(
-            "DELETE FROM access_tokens WHERE used = TRUE OR created_at < %s", (cutoff,)
-        )
-        conn.execute(
-            "INSERT INTO access_tokens (token, user_id) VALUES (%s, %s)", (token, user_id)
-        )
-        conn.commit()
-    return token
-
-
-def consume_token(token: str) -> int | None:
-    """Атомарно проверяет и сжигает токен. Возвращает user_id или None."""
-    with _conn() as conn:
-        row = conn.execute(
-            "SELECT user_id, used, created_at FROM access_tokens WHERE token = %s FOR UPDATE",
-            (token,),
-        ).fetchone()
-        if row is None or row["used"] or _expired(row["created_at"]):
-            conn.rollback()
-            return None
-        conn.execute("UPDATE access_tokens SET used = TRUE WHERE token = %s", (token,))
-        conn.commit()
-        return row["user_id"]
-
-
-def validate_token(token: str) -> bool:
-    """Только проверяет, не сжигает — для /check_token."""
-    with _conn() as conn:
-        row = conn.execute(
-            "SELECT used, created_at FROM access_tokens WHERE token = %s", (token,)
-        ).fetchone()
-    if row is None:
-        return False
-    return not row["used"] and not _expired(row["created_at"])
-
-
-def get_user_by_token(token: str) -> int | None:
-    """Проверяет токен и возвращает user_id, не сжигая его."""
-    with _conn() as conn:
-        row = conn.execute(
-            "SELECT user_id, used, created_at FROM access_tokens WHERE token = %s", (token,)
-        ).fetchone()
-    if row is None or row["used"] or _expired(row["created_at"]):
-        return None
-    return row["user_id"]
+    elif kind == "subscription":
+        with _conn() as conn:
+            conn.execute(
+                "UPDATE users SET sub_used = GREATEST(0, sub_used - 1) WHERE id = %s",
+                (user_id,),
+            )
+            conn.commit()
 
 
 # ── Рефералы ──
@@ -466,6 +431,15 @@ def _selftest() -> None:
     assert fresh["paid_checks"] == 4, "баланс должен быть 4"
     assert len(history) == 1, "в истории должна быть 1 запись"
     assert after == before + 1, "счётчик проверок должен вырасти на 1"
+
+    # подписка: месячная норма (списание + возврат)
+    add_subscription(uid, 30)
+    assert subscription_left(get_user_by_id(uid)) == SUBSCRIPTION_MONTHLY_QUOTA, "новая подписка — полная норма"
+    assert consume_check(uid) == "subscription", "по подписке списывается 'subscription'"
+    assert subscription_left(get_user_by_id(uid)) == SUBSCRIPTION_MONTHLY_QUOTA - 1, "норма уменьшилась на 1"
+    refund_check(uid, "subscription")
+    assert subscription_left(get_user_by_id(uid)) == SUBSCRIPTION_MONTHLY_QUOTA, "refund вернул норму"
+    print(f"подписка: норма {SUBSCRIPTION_MONTHLY_QUOTA}/мес — списание/возврат OK")
 
     # чистим тестовые данные и возвращаем счётчик как было
     with _conn() as conn:

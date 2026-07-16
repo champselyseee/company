@@ -160,13 +160,14 @@ async def handle_me(request):
     user = await _auth(request)
     if user is None:
         return _json({"error": "unauthorized"}, 401)
-    sub = db.has_subscription(user)  # читает поля user, без запроса в БД
+    sub = db.has_subscription(user)
     free_left = 0 if user.get("free_used") else 1
     paid = user.get("paid_checks", 0) or 0
+    sub_left = db.subscription_left(user)  # 0, если подписки нет
     return _json({
         "username": user.get("username"),
         "subscription": sub,
-        "checksLeft": None if sub else free_left + paid,  # None = безлимит (подписка)
+        "checksLeft": sub_left + free_left + paid,  # всего доступно сейчас
     })
 
 

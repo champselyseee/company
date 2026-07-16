@@ -32,13 +32,13 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS password_hash TEXT
 
 ;
 
--- Одноразовые ключи доступа к мини-аппу (бот выдаёт при открытии WebApp, TTL 2 часа).
-CREATE TABLE IF NOT EXISTS access_tokens (
-    token      TEXT PRIMARY KEY,
-    user_id    BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    used       BOOLEAN NOT NULL DEFAULT FALSE
-)
+-- Месячная норма проверок по подписке: sub_used — сколько использовано в текущем
+-- месяце, sub_month — метка месяца 'YYYY-MM' (при смене месяца счётчик обнуляется в коде).
+ALTER TABLE users ADD COLUMN IF NOT EXISTS sub_used INTEGER NOT NULL DEFAULT 0
+
+;
+
+ALTER TABLE users ADD COLUMN IF NOT EXISTS sub_month TEXT
 
 ;
 
