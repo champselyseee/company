@@ -15,12 +15,21 @@ export interface StatsData {
 }
 
 /**
- * Счётчики на форме. Бэкенд бота публичного счётчика пока не отдаёт — возвращаем
- * null'ы, фронт покажет витринный фолбэк (счётчик не ломает форму). Сигнатура сохранена
- * ради совместимости со StatsStrip.
+ * Счётчики на форме. Зовёт GET /api/me (с initData) и берёт totalChecks — публичный
+ * счётчик «работ проверено». При ошибке/401/обрыве — null'ы (фронт покажет витринный фолбэк).
  */
-export async function fetchStats(_signal?: AbortSignal): Promise<StatsData> {
-  return { total: null, mine: null }
+export async function fetchStats(signal?: AbortSignal): Promise<StatsData> {
+  try {
+    const res = await fetch(`${BACKEND_URL}/api/me`, { headers: authHeaders(), signal })
+    if (!res.ok) return { total: null, mine: null }
+    const data = await res.json()
+    return {
+      total: typeof data.totalChecks === 'number' ? data.totalChecks : null,
+      mine: null,
+    }
+  } catch {
+    return { total: null, mine: null }
+  }
 }
 
 export interface ProxyPayload {

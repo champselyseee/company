@@ -155,10 +155,11 @@ async def handle_health(request):
 
 
 async def handle_me(request):
-    """Кто я и сколько проверок осталось (для UI мини-аппы)."""
+    """Кто я, сколько проверок осталось и публичный счётчик (для UI мини-аппы)."""
     user = await _auth(request)
     if user is None:
         return _json({"error": "unauthorized"}, 401)
+    total = await asyncio.to_thread(db.get_total_checks)  # публичный счётчик «работ проверено»
     sub = db.has_subscription(user)
     free_left = 0 if user.get("free_used") else 1
     paid = user.get("paid_checks", 0) or 0
@@ -167,6 +168,7 @@ async def handle_me(request):
         "username": user.get("username"),
         "subscription": sub,
         "checksLeft": sub_left + free_left + paid,  # всего доступно сейчас
+        "totalChecks": total,
     })
 
 
