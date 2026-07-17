@@ -1,9 +1,8 @@
-"""Веб-сервер бота для мини-аппы (Telegram WebApp).
+"""Веб-сервер бота для мини-аппы (Telegram WebApp) и вебхука оплаты.
 
 Бот работает по long-polling и параллельно (в том же процессе и event loop) поднимает
-маленький aiohttp-сервер — он обслуживает мини-аппу. Пользователь опознаётся по Telegram
-initData (подписанные данные WebApp), без токенов. Доступ/списание/проверка — в общем core/
-(не дублируем): db.consume_check / db.refund_check, grok_check.check_work, grok.ocr.
+маленький aiohttp-сервер — он обслуживает мини-аппу (Telegram initData, без токенов)
+и вебхук ЮKassa. Доступ/списание/проверка/начисление — в общем core/ (не дублируем).
 """
 
 from __future__ import annotations
@@ -145,7 +144,7 @@ def _extract_file_text(file) -> tuple[str | None, str | None]:
     return name, None
 
 
-# ── Эндпоинты ──
+# ── Эндпоинты мини-аппы ──
 
 async def handle_options(request):
     return web.Response(status=204, headers=_cors())
@@ -226,6 +225,50 @@ async def handle_ocr(request):
     return _json({"text": text})
 
 
+# ── Вебхук ЮKassa (оплата) ──
+
+async def handle_yukassa_webhook(request):
+    """Уведомление ЮKassa (payment.succeeded) → начисление в общий Postgres.
+
+    Тело доверяем (как в старом боте). ВСЕГДА отвечаем 200, иначе ЮKassa шлёт повторы.
+    Платёж создаёт магазин с metadata.user_id (Telegram id) и metadata.payload.
+    Идемпотентность — через mark_payment_processed (ЮKassa может слать повторы).
+    """
+    try:
+        body = await request.json()
+    except Exception:
+        return web.Response(status=400)
+    if body.get("event") != "payment.succeeded":
+        return web.Response(status=200)  # не наше событие — просто подтверждаем
+    obj = body.get("object") or {}
+    meta = obj.get("metadata") or {}
+    payment_id = obj.get("id")
+    payload = meta.get("payload") or ""
+    try:
+        tg_id = int(meta.get("user_id", 0))
+    except (TypeError, ValueError):
+        tg_id = 0
+    if not payment_id or not tg_id or not payload:
+        return web.Response(status=200)
+
+    def _grant() -> None:
+        user = db.get_or_create_telegram_user(tg_id)
+        uid = user["id"]
+        # Идемпотентность: повторные уведомления НЕ начисляют дважды.
+        if not db.mark_payment_processed(payment_id, user_id=uid, provider="yookassa"):
+            return
+        if payload == "rub_month":
+            db.add_subscription(uid, 30)
+        elif payload == "rub_5":
+            db.add_paid_checks(uid, 5)
+        else:
+            db.add_paid_checks(uid, 1)
+        db.reward_referrer(uid)  # реферальный бонус (идемпотентно по флагу rewarded)
+
+    await asyncio.to_thread(_grant)
+    return web.Response(status=200)
+
+
 # ── Сборка и запуск сервера ──
 
 def build_app() -> web.Application:
@@ -235,6 +278,7 @@ def build_app() -> web.Application:
     app.router.add_get("/api/me", handle_me)
     app.router.add_post("/api/check", handle_check)
     app.router.add_post("/api/ocr", handle_ocr)
+    app.router.add_post("/yukassa/webhook", handle_yukassa_webhook)  # вебхук оплаты
     app.router.add_route("OPTIONS", "/api/{tail:.*}", handle_options)  # префлайт CORS
     return app
 
