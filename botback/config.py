@@ -16,7 +16,7 @@ TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
 SUPPORT_CONTACT = os.environ.get("SUPPORT_CONTACT", "@champselyseee")
 
 # Пользователи с безлимитным доступом (по Telegram-username, без @; регистр не важен).
-WHITELIST = {"champselyseee", "dilaiip", "riavlw", "ENOTINA0", "ssmatwikss"}
+WHITELIST = {"dilaiip", "riavlw", "ENOTINA0", "ssmatwikss"}
 
 
 # ── Мини-аппа (Telegram WebApp) ──
