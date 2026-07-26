@@ -1,4 +1,8 @@
-"""Команды бота: /start, /help, /balance, /history. Оплата (/buy) — пока заглушка."""
+"""Команды бота: /start, /help, /balance, /history. Оплата (/buy) — пока заглушка.
+
+Проверка работ — только через мини-аппу (см. botback/webapp.py). На любое обычное
+сообщение в чате отвечаем подсказкой открыть приложение (open_app_hint).
+"""
 
 import asyncio
 import json
@@ -29,8 +33,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         "👋 Привет! Я проверю твою работу по критериям ЕГЭ "
         "(письмо и эссе по английскому или сочинение по русскому).\n\n"
         "Первая проверка — бесплатно.\n\n"
-        "Открой приложение кнопкой ниже 👇 или нажми /check прямо в чате "
-        "и пришли текст или фото рукописи.",
+        "Открой приложение кнопкой ниже 👇",
         reply_markup=webapp_keyboard(),
     )
 
@@ -39,7 +42,7 @@ async def help_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """/help — краткая справка по командам."""
     await update.message.reply_text(
         "Я проверяю работы по критериям ЕГЭ.\n\n"
-        "• /check — выбрать тип и прислать работу (текст или фото)\n"
+        "• Открой приложение кнопкой в /start и проверь работу там\n"
         "• /balance — сколько проверок осталось\n"
         "• /history — последние проверки\n\n"
         f"Вопросы: {config.SUPPORT_CONTACT}"
@@ -98,3 +101,11 @@ async def history_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
             pass
         lines.append(f"{i}. {name} — {when}\n{preview}".rstrip())
     await update.message.reply_text("\n".join(lines))
+
+
+async def open_app_hint(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Любое обычное сообщение (текст/фото): проверка теперь только в мини-аппе."""
+    await update.message.reply_text(
+        "✍️ Проверка работ теперь в приложении — открой его кнопкой ниже 👇",
+        reply_markup=webapp_keyboard(),
+    )

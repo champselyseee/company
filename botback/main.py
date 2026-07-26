@@ -2,6 +2,7 @@
 
 Бот работает по long-polling И поднимает рядом (в том же процессе) aiohttp-веб-сервер
 для мини-аппы (эндпоинты initData) — см. botback/webapp.py. Общий core/ зовём напрямую.
+Проверка работ — только через мини-аппу; в чате остались служебные команды.
 
 Запуск: python -m botback.main   (из корня репозитория, чтобы был виден пакет core/)
 """
@@ -11,14 +12,13 @@ import logging
 
 from telegram.ext import (
     ApplicationBuilder,
-    CallbackQueryHandler,
     CommandHandler,
     MessageHandler,
     filters,
 )
 
 from . import config
-from .handlers import check, commands
+from .handlers import commands
 from .webapp import run_web
 
 logging.basicConfig(
@@ -35,21 +35,16 @@ def build_application():
 
     app = ApplicationBuilder().token(config.TELEGRAM_TOKEN).build()
 
-    # Команды.
+    # Служебные команды. Проверка работ — только в мини-аппе (см. webapp.py).
     app.add_handler(CommandHandler("start", commands.start))
     app.add_handler(CommandHandler("help", commands.help_cmd))
     app.add_handler(CommandHandler("balance", commands.balance))
     app.add_handler(CommandHandler("history", commands.history_cmd))
     app.add_handler(CommandHandler("buy", commands.buy))
-    app.add_handler(CommandHandler("check", check.check_cmd))
 
-    # Выбор типа работы (inline-кнопки "type:...") и кнопка «Проверить ещё».
-    app.add_handler(CallbackQueryHandler(check.pick_type, pattern=r"^type:"))
-    app.add_handler(CallbackQueryHandler(check.recheck, pattern=r"^recheck$"))
-
-    # Любое фото или обычный текст (не команда) — это работа на проверку.
-    app.add_handler(MessageHandler(filters.PHOTO, check.on_work))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, check.on_work))
+    # Обычное сообщение (текст/фото) в чате — подсказываем открыть мини-аппу.
+    app.add_handler(MessageHandler(filters.PHOTO, commands.open_app_hint))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, commands.open_app_hint))
 
     return app
 
