@@ -56,33 +56,51 @@ def verify_init_data(init_data: str) -> dict | None:
     Возвращает {telegram_id, username} при валидной подписи, иначе None. Telegram считает
     hash по всем полям, КРОМЕ самого hash и поля signature (Ed25519-подпись для третьих
     сторон) — поэтому убираем оба. secret = HMAC_SHA256(key='WebAppData', msg=bot_token).
+
+    На каждый неуспех пишем в лог ПРИЧИНУ (level WARNING) — чтобы в логах Railway было
+    видно, почему мини-аппа получает 401 (пустая подпись / чужой бот / просрочка / т.д.).
     """
     secret_key = _webapp_secret()
-    if not init_data or secret_key is None:
+    if secret_key is None:
+        log.warning("initData: TELEGRAM_TOKEN не задан — проверять подпись нечем")
+        return None
+    if not init_data:
+        log.warning("initData: пустая строка (аппа открыта без подписи Telegram?)")
         return None
 
     data = dict(parse_qsl(init_data, keep_blank_values=True))  # значения раскодированы
     received_hash = data.pop("hash", None)
     data.pop("signature", None)  # signature НЕ входит в data_check_string
     if not received_hash:
+        log.warning("initData: нет поля hash. Присланные поля: %s", sorted(data))
         return None
 
     data_check_string = "\n".join(f"{k}={v}" for k, v in sorted(data.items()))
     calc_hash = hmac.new(secret_key, data_check_string.encode(), hashlib.sha256).hexdigest()
     if not hmac.compare_digest(calc_hash, received_hash):
+        log.warning(
+            "initData: hash НЕ совпал — подпись сделана НЕ тем ботом, чей токен в "
+            "TELEGRAM_TOKEN (либо поля подменены). Присланные поля: %s",
+            sorted(data),
+        )
         return None
 
     try:  # initData не старше суток
-        if time.time() - int(data.get("auth_date", "0")) > INIT_DATA_MAX_AGE:
-            return None
+        age = time.time() - int(data.get("auth_date", "0"))
     except (TypeError, ValueError):
+        log.warning("initData: некорректный auth_date=%r", data.get("auth_date"))
+        return None
+    if age > INIT_DATA_MAX_AGE:
+        log.warning("initData: просрочена — возраст %.1f ч (лимит 24 ч)", age / 3600)
         return None
 
     try:  # поле user — JSON-строка с данными аккаунта
         user = json.loads(data.get("user", ""))
         telegram_id = int(user["id"])
     except (ValueError, KeyError, TypeError):
+        log.warning("initData: не разобрать поле user=%r", data.get("user"))
         return None
+    log.info("initData: OK, telegram_id=%s, возраст %.0f c", telegram_id, age)
     return {"telegram_id": telegram_id, "username": user.get("username")}
 
 
@@ -103,7 +121,14 @@ def _json(data, status: int = 200):
 async def _auth(request) -> dict | None:
     """initData из заголовка 'Authorization: tma <initData>' → строка users из БД, либо None."""
     auth = request.headers.get("Authorization", "")
-    init_data = auth[4:].strip() if auth[:4].lower() == "tma " else ""
+    if auth[:4].lower() == "tma ":
+        init_data = auth[4:].strip()
+    else:
+        init_data = ""
+        log.warning(
+            "api %s: нет заголовка 'Authorization: tma ...' (получено начало: %r)",
+            request.path, auth[:16],
+        )
     ident = verify_init_data(init_data)
     if ident is None:
         return None
