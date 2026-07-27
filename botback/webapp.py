@@ -54,8 +54,9 @@ def verify_init_data(init_data: str) -> dict | None:
     """Проверяет подпись initData от Telegram WebApp.
 
     Возвращает {telegram_id, username} при валидной подписи, иначе None. Telegram считает
-    hash по всем полям, КРОМЕ самого hash и поля signature (Ed25519-подпись для третьих
-    сторон) — поэтому убираем оба. secret = HMAC_SHA256(key='WebAppData', msg=bot_token).
+    hash по всем полям, КРОМЕ самого hash. Поле signature (Ed25519 для третьих сторон) в
+    разных версиях клиента то входит в data_check_string, то нет — поэтому проверяем оба
+    варианта. secret = HMAC_SHA256(key='WebAppData', msg=bot_token).
 
     На каждый неуспех пишем в лог ПРИЧИНУ (level WARNING) — чтобы в логах Railway было
     видно, почему мини-аппа получает 401 (пустая подпись / чужой бот / просрочка / т.д.).
@@ -70,18 +71,31 @@ def verify_init_data(init_data: str) -> dict | None:
 
     data = dict(parse_qsl(init_data, keep_blank_values=True))  # значения раскодированы
     received_hash = data.pop("hash", None)
-    data.pop("signature", None)  # signature НЕ входит в data_check_string
+    signature = data.pop("signature", None)  # Ed25519-подпись для третьих сторон
     if not received_hash:
         log.warning("initData: нет поля hash. Присланные поля: %s", sorted(data))
         return None
 
-    data_check_string = "\n".join(f"{k}={v}" for k, v in sorted(data.items()))
-    calc_hash = hmac.new(secret_key, data_check_string.encode(), hashlib.sha256).hexdigest()
-    if not hmac.compare_digest(calc_hash, received_hash):
+    def _calc(include_signature: bool) -> str:
+        items = dict(data)
+        if include_signature and signature is not None:
+            items["signature"] = signature
+        dcs = "\n".join(f"{k}={v}" for k, v in sorted(items.items()))
+        return hmac.new(secret_key, dcs.encode(), hashlib.sha256).hexdigest()
+
+    # Считаем hash ДВУМЯ способами: без signature (как в доке) и с ним — Telegram в
+    # разных версиях трактует по-разному. Достаточно совпадения любого варианта.
+    calc_no_sig = _calc(False)
+    calc_with_sig = _calc(True)
+    if not (
+        hmac.compare_digest(calc_no_sig, received_hash)
+        or hmac.compare_digest(calc_with_sig, received_hash)
+    ):
         log.warning(
-            "initData: hash НЕ совпал — подпись сделана НЕ тем ботом, чей токен в "
-            "TELEGRAM_TOKEN (либо поля подменены). Присланные поля: %s",
-            sorted(data),
+            "initData: hash НЕ совпал. recv=%s calc_no_sig=%s calc_with_sig=%s "
+            "auth_date=%s query_id=%s user=%r",
+            received_hash, calc_no_sig, calc_with_sig,
+            data.get("auth_date"), data.get("query_id"), data.get("user"),
         )
         return None
 
