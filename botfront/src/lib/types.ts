@@ -1,4 +1,7 @@
 export type WorkType = 'email' | 'essay' | 'composition'
+/** Ключ SVG-иконки типа работы (см. lib/icons.tsx). Эмодзи не используем:
+    они зависят от шрифта платформы и выглядят по-разному. Как на сайте. */
+export type WorkIconKey = 'mail' | 'pen' | 'book'
 
 export type Screen =
   | 'checking'
@@ -16,7 +19,7 @@ export interface AttachedFile {
 
 export interface WorkTypeMeta {
   type: WorkType
-  icon: string
+  iconKey: WorkIconKey
   title: string
   subtitle: string
   /** Заголовок результата. */

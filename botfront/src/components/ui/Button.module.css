@@ -1,5 +1,10 @@
 .base {
   width: 100%;
+  /* Флекс — чтобы ведущая иконка вставала вплотную к подписи, как на сайте. */
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
   border-radius: var(--r-md);
   font-family: var(--font-display);
   font-weight: 700;

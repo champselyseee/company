@@ -102,12 +102,14 @@ export function App() {
       showError('⚠️ Выберите тип работы')
       return
     }
-    if (!text && !file && photos.length === 0) {
-      showError('⚠️ Введите текст или прикрепите файл/фото')
+    // photos/file — это ЗАДАНИЕ, а не работа. Поэтому текст работы обязателен:
+    // иначе на проверку уехало бы одно задание и проверка списалась бы впустую.
+    if (!text) {
+      showError('⚠️ Вставьте или распознайте текст работы')
       return
     }
-    if (text && text.length < MIN_TEXT_LENGTH && !file && photos.length === 0) {
-      showError('⚠️ Текст слишком короткий (минимум 50 символов)')
+    if (text.length < MIN_TEXT_LENGTH) {
+      showError(`⚠️ Текст слишком короткий (минимум ${MIN_TEXT_LENGTH} символов)`)
       return
     }
 
