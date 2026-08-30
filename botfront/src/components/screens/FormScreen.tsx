@@ -71,6 +71,9 @@ function pickFile(accept: string): Promise<File | null> {
     input.type = 'file'
     input.accept = accept
     input.onchange = () => resolve(input.files?.[0] ?? null)
+    // Без этого при отмене диалога onchange не сработает и промис повиснет навсегда
+    // (утечка обработчика и самого input на каждую отмену).
+    input.oncancel = () => resolve(null)
     input.click()
   })
 }
@@ -137,13 +140,28 @@ export function FormScreen({
     try {
       const dataUrl = await resizeImageToBase64(file)
       onPhotosChange([...form.photos, dataUrl])
+      // Снимок уже прикреплён и уедет модели — поэтому и при пустом ответе, и при
+      // ошибке распознавания говорим об этом прямо, иначе человек решит, что не
+      // прикрепилось, и приложит второй раз (упрётся в лимит).
       const recognized = await recognizePhoto(dataUrl)
       if (recognized.trim()) setTaskText(recognized.trim())
+      else onError('⚠️ Фото задания прикреплено, но текст на нём не распознан')
     } catch (e) {
-      onError('❌ ' + (e instanceof Error ? e.message : String(e)))
+      onError(
+        '⚠️ Фото задания прикреплено, но распознать не вышло: ' +
+          (e instanceof Error ? e.message : String(e)),
+      )
     } finally {
       setBusy(false)
     }
+  }
+
+  // Снять фото задания. Если фото не осталось — убираем и отметку о распознавании,
+  // иначе «Задание распознано ✓» висело бы без самого задания.
+  function removeTaskPhoto(index: number) {
+    const rest = form.photos.filter((_, i) => i !== index)
+    onPhotosChange(rest)
+    if (rest.length === 0) setTaskText('')
   }
 
   // ── Задание: файл ──
@@ -320,8 +338,38 @@ export function FormScreen({
               <IconUpload size={18} /> Файл задания
             </button>
           </div>
+          {(form.photos.length > 0 || form.file) && (
+            <div className={styles.attached}>
+              {form.photos.map((photo, i) => (
+                <span key={i} className={styles.thumb}>
+                  <img src={photo} alt="" />
+                  <button
+                    type="button"
+                    className={styles.remove}
+                    aria-label={`Убрать фото задания ${i + 1}`}
+                    onClick={() => removeTaskPhoto(i)}
+                  >
+                    ×
+                  </button>
+                </span>
+              ))}
+              {form.file && (
+                <span className={styles.fileChip}>
+                  <IconUpload size={14} />
+                  <span className={styles.fileName}>{form.file.name}</span>
+                  <button
+                    type="button"
+                    className={styles.remove}
+                    aria-label="Убрать файл задания"
+                    onClick={() => onFileChange(null)}
+                  >
+                    ×
+                  </button>
+                </span>
+              )}
+            </div>
+          )}
           {taskText.trim() && <p className={styles.recognizedNote}>Задание распознано ✓</p>}
-          {form.file && <p className={styles.recognizedNote}>Файл задания прикреплён ✓</p>}
 
           {/* Шаг 3 — работа ученика */}
           <FormStep n={3} title="Работа ученика" sub="Текст или фото рукописной работы" spaced />

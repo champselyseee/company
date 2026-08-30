@@ -1,4 +1,12 @@
 /* ── Страница проверки в мини-аппе ──
+   ВАЖНО: десктопные брейкпоинты сайта (@media min-width 760/768/920) отсюда убраны.
+   Они считают ширину ОКНА, а мини-аппа всегда живёт в колонке #root шириной 560px:
+   в широком окне Telegram Desktop они срабатывали и ломали вид — .heroArt получал
+   142px под стикеры и медведя, заголовок раздувался до 52px. Колонка 560px должна
+   всегда рисовать узкую раскладку сайта, поэтому широкие правила не нужны.
+   По той же причине размеры на vw ограничены: vw — это ширина ОКНА, и в широком
+   окне заголовок раздувался до 52px внутри колонки 560px. Верхняя граница взята
+   ровно та, что даёт сайт при окне 560px (6vw = 33.6px и т.д.).
    Перенесена со страницы проверки сайта (sitefront CheckPage.module.css) целиком,
    значения не менялись: мини-аппа и сайт должны выглядеть одинаково.
    Переименованы только .checkerCard → .card и .checkerHead → .head. */
@@ -10,14 +18,6 @@
   gap: 36px;
   padding-top: 44px;
   padding-bottom: 28px;
-}
-@media (min-width: 920px) {
-  .hero {
-    grid-template-columns: 1.1fr 0.9fr;
-    align-items: center;
-    padding-top: 64px;
-    padding-bottom: 48px;
-  }
 }
 
 .eyebrow {
@@ -40,7 +40,7 @@
 .h1 {
   font-family: var(--font-display);
   font-weight: 800;
-  font-size: clamp(30px, 6vw, 52px);
+  font-size: clamp(30px, min(6vw, 33.6px), 52px);
   line-height: 1.05;
   letter-spacing: -0.5px;
   margin: 18px 0 0;
@@ -80,11 +80,6 @@
   position: relative;
   min-height: 230px;
   display: none;
-}
-@media (min-width: 920px) {
-  .heroArt {
-    display: block;
-  }
 }
 .sticker {
   position: absolute;
@@ -159,11 +154,6 @@
   box-shadow: var(--shadow-offset) var(--shadow-offset) 0 var(--ink);
   padding: 26px 24px;
 }
-@media (min-width: 768px) {
-  .guestCard {
-    padding: 30px 34px;
-  }
-}
 .guestText {
   flex: 1 1 320px;
   min-width: 0;
@@ -187,7 +177,7 @@
 .guestTitle {
   font-family: var(--font-display);
   font-weight: 800;
-  font-size: clamp(21px, 3.2vw, 30px);
+  font-size: clamp(21px, min(3.2vw, 17.9px), 30px);
   line-height: 1.12;
   letter-spacing: -0.3px;
   margin-top: 14px;
@@ -279,11 +269,6 @@
   grid-template-columns: repeat(2, 1fr);
   gap: 12px;
 }
-@media (min-width: 760px) {
-  .stats {
-    grid-template-columns: repeat(4, 1fr);
-  }
-}
 .statTile {
   background: var(--paper-card);
   border: 2.5px solid var(--ink);
@@ -330,7 +315,7 @@
 .h2 {
   font-family: var(--font-display);
   font-weight: 800;
-  font-size: clamp(24px, 4vw, 34px);
+  font-size: clamp(24px, min(4vw, 22.4px), 34px);
   color: var(--ink);
   letter-spacing: -0.3px;
 }
@@ -348,11 +333,6 @@
   border-radius: var(--r-lg);
   box-shadow: var(--shadow-offset) var(--shadow-offset) 0 var(--ink);
   padding: 26px 22px 24px;
-}
-@media (min-width: 768px) {
-  .card {
-    padding: 30px 28px;
-  }
 }
 
 /* Нумерованные шаги формы */
@@ -748,11 +728,6 @@
   margin-top: 26px;
   text-align: left;
 }
-@media (min-width: 760px) {
-  .stepGrid {
-    grid-template-columns: repeat(3, 1fr);
-  }
-}
 .step {
   background: var(--paper-card);
   border: 2.5px solid var(--ink);
@@ -873,4 +848,80 @@
    у бота всё живёт в CSS Modules, поэтому вынесено в класс. Значение то же. */
 .formStepSpaced {
   margin-top: 26px;
+}
+
+/* ── Прикреплённое задание ──
+   На сайте фото задания не прикрепляется (только распознаётся), поэтому убирать там
+   нечего. У бота снимок реально уезжает модели, значит его надо видеть и уметь снять. */
+.attached {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+}
+.thumb {
+  position: relative;
+  display: block;
+  width: 54px;
+  height: 54px;
+  border: 2px solid var(--ink);
+  border-radius: var(--r-sm);
+  overflow: hidden;
+  background: var(--paper-card);
+}
+.thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.fileChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  max-width: 100%;
+  padding: 7px 8px 7px 11px;
+  background: var(--paper-card);
+  border: 2px solid var(--ink);
+  border-radius: var(--r-sm);
+  font-size: 12.5px;
+  color: var(--ink);
+}
+.fileName {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 150px;
+}
+.remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  flex: none;
+  padding: 0;
+  border: 2px solid var(--ink);
+  border-radius: 50%;
+  background: var(--coral);
+  color: var(--on-accent);
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+}
+.thumb .remove {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 20px;
+  height: 20px;
+  font-size: 12px;
+}
+.remove:hover {
+  background: var(--coral-deep);
+}
+.remove:focus-visible {
+  outline: 3px solid var(--indigo);
+  outline-offset: 2px;
 }
