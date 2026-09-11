@@ -46,13 +46,26 @@ except ImportError:
     from claude import PROMPTS, RESULT_SCHEMA
 
 
-XAI_API_KEY     = os.environ.get("XAI_API_KEY")
-GROK_MODEL      = os.environ.get("GROK_CHECK_MODEL", os.environ.get("GROK_MODEL", "grok-4"))
-GROK_BASE_URL   = os.environ.get("GROK_BASE_URL", "https://api.x.ai/v1")
-MAX_TOKENS      = int(os.environ.get("GROK_CHECK_MAX_TOKENS", "16000"))
+def _env(name: str, default: str | None = None) -> str | None:
+    """Значение переменной окружения без пробелов по краям.
+
+    Ключи и адреса вставляют в панель Railway руками, и прицепившийся пробел или
+    перевод строки молча превращает рабочий ключ в «неверный». Проверено на живом
+    API: xAI на такое значение отвечает 400 invalid-argument «Incorrect API key
+    provided» (а на просто неизвестный ключ — 401 bad-credentials), и по этой
+    ошибке причину не угадать. Пустая строка считается «не задано».
+    """
+    value = (os.environ.get(name) or "").strip()
+    return value or default
+
+
+XAI_API_KEY     = _env("XAI_API_KEY")
+GROK_MODEL      = _env("GROK_CHECK_MODEL") or _env("GROK_MODEL", "grok-4")
+GROK_BASE_URL   = _env("GROK_BASE_URL", "https://api.x.ai/v1")
+MAX_TOKENS      = int(_env("GROK_CHECK_MAX_TOKENS", "16000"))
 # «Таймаут на максимум»: длинная проверка не обрывается раньше времени.
-REQUEST_TIMEOUT = int(os.environ.get("REQUEST_TIMEOUT", "600"))
-AI_CONCURRENCY  = int(os.environ.get("AI_CONCURRENCY", "10"))
+REQUEST_TIMEOUT = int(_env("REQUEST_TIMEOUT", "600"))
+AI_CONCURRENCY  = int(_env("AI_CONCURRENCY", "10"))
 MAX_INPUT_CHARS = 60000  # длиннее — текст работы обрезаем (как в claude.py)
 
 log = logging.getLogger(__name__)
@@ -90,6 +103,28 @@ def _validate_photo(photo) -> None:
     """Проверяет, что фото — корректный data-URL (data:image/...;base64,<данные>)."""
     if not isinstance(photo, str) or not photo.startswith("data:image/") or "," not in photo:
         raise GrokCheckError("Некорректное фото: ожидается data:image/...;base64,<данные>")
+
+
+def _format_rejected(e) -> bool:
+    """Похоже ли, что сервер отверг ИМЕННО параметр response_format.
+
+    Раньше поводом для повтора считался любой код 400/404/422 — и из-за этого в лог
+    уходило «Grok отклонил response_format», когда на деле был неверный ключ или
+    несуществующая модель. Теперь смотрим в текст ошибки и повторяем только по делу.
+    """
+    text = str(getattr(e, "message", "") or e).lower()
+    return "response_format" in text or "json_object" in text or "json mode" in text
+
+
+def _key_rejected(e) -> bool:
+    """Похоже ли, что сервер не принял ключ доступа.
+
+    xAI отвечает по-разному: 401 bad-credentials — ключ неизвестен; 400
+    invalid-argument «Incorrect API key provided» — в переменной вообще не ключ
+    (заглушка, имя переменной, нерасшифрованная ссылка ${{…}} или пробел внутри).
+    """
+    text = str(getattr(e, "message", "") or e).lower()
+    return "api key" in text or "credentials" in text
 
 
 def _build_user_content(prompt: str, combined_text: str, photos):
@@ -164,10 +199,12 @@ async def check_work(
             try:
                 resp = await client().chat.completions.create(**_create_kwargs(True))
             except openai.APIStatusError as e:
-                # Некоторые модели/версии xAI могут не принимать параметр response_format.
-                # Тогда повторяем запрос без него — строгий JSON всё равно задан в промпте
-                # (FORMAT_BLOCK), поэтому формат ответа не теряется.
-                if getattr(e, "status_code", None) in (400, 404, 422):
+                # Некоторые модели/версии xAI не принимают параметр response_format.
+                # Тогда повторяем запрос без него — строгий JSON всё равно задан в
+                # промпте (FORMAT_BLOCK), поэтому формат ответа не теряется.
+                # Но повторяем ТОЛЬКО если ошибка действительно про этот параметр:
+                # иначе неверный ключ или чужая модель маскировались под него.
+                if getattr(e, "status_code", None) in (400, 404, 422) and _format_rejected(e):
                     log.warning("Grok отклонил response_format (%s) — повтор без него", e.status_code)
                     resp = await client().chat.completions.create(**_create_kwargs(False))
                 else:
@@ -175,6 +212,14 @@ async def check_work(
     except openai.APITimeoutError as e:
         raise GrokCheckError("Таймаут ответа от ИИ") from e
     except openai.APIStatusError as e:
+        if _key_rejected(e):
+            log.error(
+                "Grok не принял XAI_API_KEY (код %s). Код 400 «Incorrect API key provided» "
+                "означает, что в переменной не ключ (заглушка/имя переменной/ссылка ${{…}}/"
+                "пробел внутри); 401 — ключ неизвестен или обрезан при копировании. "
+                "Проверь переменную у службы бота на Railway. Ответ: %s",
+                getattr(e, "status_code", "?"), str(e)[:200],
+            )
         raise GrokCheckError(f"Ошибка проверки (Grok): {str(e)[:200]}") from e
     except openai.APIError as e:  # прочие ошибки клиента/сети
         raise GrokCheckError(f"Ошибка проверки (Grok): {str(e)[:200]}") from e

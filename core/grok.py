@@ -38,13 +38,26 @@ except ImportError:  # чтобы --selftest работал даже без ус
     pass
 
 
-XAI_API_KEY     = os.environ.get("XAI_API_KEY")
-GROK_MODEL      = os.environ.get("GROK_MODEL", "grok-4")
-GROK_BASE_URL   = os.environ.get("GROK_BASE_URL", "https://api.x.ai/v1")
-GROK_MAX_TOKENS = int(os.environ.get("GROK_MAX_TOKENS", "4000"))
+def _env(name: str, default: str | None = None) -> str | None:
+    """Значение переменной окружения без пробелов по краям.
+
+    Ключи и адреса вставляют в панель Railway руками, и прицепившийся пробел или
+    перевод строки молча превращает рабочий ключ в «неверный». Проверено на живом
+    API: xAI на такое значение отвечает 400 invalid-argument «Incorrect API key
+    provided» (а на просто неизвестный ключ — 401 bad-credentials), и по этой
+    ошибке причину не угадать. Пустая строка считается «не задано».
+    """
+    value = (os.environ.get(name) or "").strip()
+    return value or default
+
+
+XAI_API_KEY     = _env("XAI_API_KEY")
+GROK_MODEL      = _env("GROK_MODEL", "grok-4")
+GROK_BASE_URL   = _env("GROK_BASE_URL", "https://api.x.ai/v1")
+GROK_MAX_TOKENS = int(_env("GROK_MAX_TOKENS", "4000"))
 # «Таймаут на максимум»: долгое распознавание не обрывается раньше времени.
-REQUEST_TIMEOUT = int(os.environ.get("REQUEST_TIMEOUT", "600"))
-AI_CONCURRENCY  = int(os.environ.get("AI_CONCURRENCY", "10"))
+REQUEST_TIMEOUT = int(_env("REQUEST_TIMEOUT", "600"))
+AI_CONCURRENCY  = int(_env("AI_CONCURRENCY", "10"))
 
 log = logging.getLogger(__name__)
 
