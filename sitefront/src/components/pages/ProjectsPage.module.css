@@ -1,16 +1,22 @@
-/* ── Страница «Наши проекты» ── (рисограф-система) */
+/* ── Страница «Telegram-бот» ── (рисограф-система, по образцу главной) */
 
 /* Геро */
 .hero {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 36px;
   padding-top: 44px;
-  padding-bottom: 8px;
-  text-align: center;
+  padding-bottom: 28px;
 }
 @media (min-width: 920px) {
   .hero {
-    padding-top: 60px;
+    grid-template-columns: 1.1fr 0.9fr;
+    align-items: center;
+    padding-top: 64px;
+    padding-bottom: 48px;
   }
 }
+
 .eyebrow {
   display: inline-flex;
   align-items: center;
@@ -27,173 +33,358 @@
   letter-spacing: 0.4px;
   color: var(--indigo);
 }
+
 .h1 {
   font-family: var(--font-display);
   font-weight: 800;
-  font-size: clamp(28px, 5vw, 46px);
-  line-height: 1.06;
+  font-size: clamp(30px, 6vw, 52px);
+  line-height: 1.05;
   letter-spacing: -0.5px;
-  margin: 16px 0 0;
+  margin: 18px 0 0;
   color: var(--ink);
 }
-.lead {
-  margin: 14px auto 0;
-  font-size: 16px;
-  line-height: 1.6;
-  color: var(--ink-soft);
-  max-width: 54ch;
+.markCoral {
+  color: var(--coral-deep);
+}
+.markIndigo {
+  color: var(--indigo);
 }
 
-/* Сетка */
-.gridWrap {
-  padding-block: 26px 28px;
+.lead {
+  margin-top: 16px;
+  font-size: 17px;
+  line-height: 1.6;
+  color: var(--ink-soft);
+  max-width: 40ch;
 }
-.grid {
+
+.heroActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 26px;
+}
+
+/* Главная кнопка-ссылка на бота (как primary-кнопка сайта) */
+.cta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-height: 54px;
+  padding: 16px 26px;
+  background: var(--coral);
+  color: var(--on-accent);
+  border: var(--border-w) solid var(--ink);
+  border-radius: var(--r-md);
+  box-shadow: 5px 5px 0 var(--ink);
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 16px;
+  letter-spacing: 0.2px;
+  text-decoration: none;
+  touch-action: manipulation;
+  transition:
+    transform 0.12s cubic-bezier(0.3, 1.4, 0.5, 1),
+    box-shadow 0.12s ease,
+    background 0.18s ease;
+}
+.cta:hover {
+  transform: translate(-1px, -1px);
+  box-shadow: 6px 6px 0 var(--ink);
+  background: var(--coral-deep);
+}
+.cta:active {
+  transform: translate(5px, 5px);
+  box-shadow: 0 0 0 var(--ink);
+}
+.cta:focus-visible,
+.finalBtn:focus-visible {
+  outline: 3px solid var(--indigo);
+  outline-offset: 3px;
+}
+@media (max-width: 560px) {
+  .cta {
+    flex: 1 1 100%;
+  }
+}
+
+.note {
+  margin-top: 14px;
+  font-size: 13px;
+  color: var(--ink-faint);
+  font-weight: 500;
+}
+
+/* Декоративные стикеры */
+.heroArt {
+  position: relative;
+  min-height: 230px;
+  display: none;
+}
+@media (min-width: 920px) {
+  .heroArt {
+    display: block;
+  }
+}
+.sticker {
+  position: absolute;
+  background: var(--paper-card);
+  border: 2.5px solid var(--ink);
+  border-radius: var(--r-md);
+  box-shadow: 6px 6px 0 var(--ink);
+  padding: 18px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.stickerScore {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 32px;
+  color: var(--ink);
+}
+.stickerCap {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink-soft);
+}
+.stickerA {
+  top: 6%;
+  left: 4%;
+  background: var(--yellow);
+  z-index: 2;
+}
+.stickerB {
+  top: 42%;
+  right: 2%;
+  box-shadow: 6px 6px 0 var(--indigo);
+  z-index: 1;
+}
+.stickerC {
+  bottom: 6%;
+  left: 22%;
+  background: var(--indigo);
+  color: var(--on-accent);
+  border-radius: 18px;
+  box-shadow: 5px 5px 0 var(--ink);
+  padding: 16px;
+  z-index: 3;
+}
+/* Медведь-маскот (декор): карточки-оценки парят вокруг него */
+.heroBear {
+  position: absolute;
+  left: 44%;
+  bottom: -4%;
+  width: 182px;
+  height: auto;
+  z-index: 2;
+  transform: rotate(-3deg);
+  filter: drop-shadow(4px 6px 0 rgba(28, 22, 16, 0.16));
+}
+
+/* ── Как это работает ── */
+.stepsSection {
+  padding-top: 22px;
+  padding-bottom: 20px;
+}
+.stepsHead {
+  text-align: center;
+  margin-bottom: 22px;
+}
+.h2 {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: clamp(24px, 4vw, 34px);
+  color: var(--ink);
+  letter-spacing: -0.3px;
+}
+.h2sub {
+  margin-top: 8px;
+  font-size: 15px;
+  color: var(--ink-soft);
+}
+
+.steps {
+  list-style: none;
   display: grid;
   grid-template-columns: 1fr;
   gap: 18px;
 }
-@media (min-width: 620px) {
-  .grid {
-    grid-template-columns: repeat(2, 1fr);
-  }
-}
-@media (min-width: 960px) {
-  .grid {
+@media (min-width: 760px) {
+  .steps {
     grid-template-columns: repeat(3, 1fr);
   }
 }
-
-/* Карточка-ссылка: лого → название → описание → открыть */
-.card {
-  --accent: var(--coral);
+.step {
+  position: relative;
   display: flex;
   flex-direction: column;
   padding: 22px 20px 20px;
   background: var(--paper-card);
-  border: 2.5px solid var(--ink);
+  border: var(--border-w) solid var(--ink);
   border-radius: var(--r-lg);
   box-shadow: 5px 5px 0 var(--ink);
-  text-decoration: none;
-  color: inherit;
-  transition:
-    transform 0.16s cubic-bezier(0.3, 1.4, 0.5, 1),
-    box-shadow 0.16s ease;
 }
-.card:hover {
-  transform: translate(-2px, -2px);
-  box-shadow: 7px 7px 0 var(--accent);
+.step:nth-child(2) {
+  box-shadow: 5px 5px 0 var(--indigo);
 }
-.card:active {
-  transform: translate(2px, 2px);
-  box-shadow: 2px 2px 0 var(--accent);
+.step:nth-child(3) {
+  box-shadow: 5px 5px 0 var(--coral);
 }
-.card:focus-visible {
-  outline: 3px solid var(--indigo);
-  outline-offset: 3px;
-}
-
-.accentCoral {
-  --accent: var(--coral);
-}
-.accentIndigo {
-  --accent: var(--indigo);
-}
-.accentGreen {
-  --accent: var(--green);
-}
-.accentYellow {
-  --accent: var(--yellow);
-}
-
-/* Лого */
-.logo {
+.stepNum {
+  position: absolute;
+  top: -14px;
+  right: 16px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 56px;
-  height: 56px;
-  background: var(--accent);
-  border: 2.5px solid var(--ink);
-  border-radius: 16px;
+  width: 34px;
+  height: 34px;
+  background: var(--yellow);
+  color: var(--ink);
+  border: 2px solid var(--ink);
+  border-radius: 999px;
+  box-shadow: 2px 2px 0 var(--ink);
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 15px;
+  transform: rotate(6deg);
+}
+.stepIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 52px;
+  height: 52px;
+  background: var(--indigo);
+  color: var(--on-accent);
+  border: var(--border-w) solid var(--ink);
+  border-radius: 15px;
   box-shadow: 3px 3px 0 var(--ink);
-  overflow: hidden;
   margin-bottom: 14px;
 }
-.logoImg {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-.logoMono {
+.stepTitle {
   font-family: var(--font-display);
   font-weight: 800;
-  font-size: 26px;
-  color: var(--ink);
-}
-
-/* Название */
-.cardTitle {
-  font-family: var(--font-display);
-  font-weight: 800;
-  font-size: 21px;
+  font-size: 20px;
   line-height: 1.15;
   color: var(--ink);
 }
-.tag {
-  align-self: flex-start;
-  display: inline-flex;
-  align-items: center;
+.stepText {
   margin-top: 8px;
-  padding: 4px 10px;
-  background: var(--paper-2);
-  color: var(--ink-soft);
-  border: 1.5px solid var(--ink);
-  border-radius: 999px;
-  font-family: var(--font-display);
-  font-weight: 700;
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.4px;
-}
-
-/* Описание */
-.cardDesc {
-  margin-top: 10px;
   font-size: 14.5px;
   line-height: 1.55;
   color: var(--ink-soft);
 }
 
-/* Открыть */
-.cardCta {
+/* ── Финальная плашка (как приглашение гостя на главной) ── */
+.finalWrap {
+  padding-block: 26px 12px;
+}
+.finalCard {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  background: var(--indigo);
+  color: var(--on-accent);
+  border: var(--border-w) solid var(--ink);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-offset) var(--shadow-offset) 0 var(--ink);
+  padding: 26px 24px;
+}
+@media (min-width: 768px) {
+  .finalCard {
+    padding: 30px 34px;
+  }
+}
+.finalText {
+  flex: 1 1 320px;
+  min-width: 0;
+}
+.finalEyebrow {
   display: inline-flex;
   align-items: center;
   gap: 7px;
-  align-self: flex-start;
-  margin-top: 18px;
-  padding: 9px 16px;
-  background: var(--accent);
+  padding: 6px 12px;
+  background: var(--yellow);
   color: var(--ink);
-  border: 2.5px solid var(--ink);
-  border-radius: 12px;
-  box-shadow: 3px 3px 0 var(--ink);
+  border: 2px solid var(--ink);
+  border-radius: 999px;
+  box-shadow: 2px 2px 0 var(--ink);
   font-family: var(--font-display);
   font-weight: 700;
-  font-size: 14px;
-  transition:
-    transform 0.12s ease,
-    box-shadow 0.12s ease;
+  font-size: 11.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
 }
-.card:hover .cardCta {
+.finalTitle {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: clamp(21px, 3.2vw, 30px);
+  line-height: 1.12;
+  letter-spacing: -0.3px;
+  margin-top: 14px;
+  color: var(--on-accent);
+}
+.finalAccent {
+  color: var(--yellow);
+}
+.finalLead {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-top: 12px;
+  font-size: 15px;
+  line-height: 1.55;
+  color: rgba(255, 247, 236, 0.86);
+  max-width: 46ch;
+}
+.finalLead svg {
+  flex: 0 0 auto;
+  margin-top: 4px;
+}
+.finalBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  padding: 16px 24px;
+  background: var(--paper-card);
+  color: var(--ink);
+  border: var(--border-w) solid var(--ink);
+  border-radius: var(--r-md);
+  box-shadow: 5px 5px 0 var(--ink);
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 16px;
+  text-decoration: none;
+  transition:
+    transform 0.12s cubic-bezier(0.3, 1.4, 0.5, 1),
+    box-shadow 0.12s ease,
+    background 0.18s ease;
+}
+.finalBtn:hover {
   transform: translate(-1px, -1px);
-  box-shadow: 4px 4px 0 var(--ink);
+  box-shadow: 6px 6px 0 var(--ink);
+  background: var(--yellow);
+}
+.finalBtn:active {
+  transform: translate(5px, 5px);
+  box-shadow: 0 0 0 var(--ink);
+}
+@media (max-width: 560px) {
+  .finalBtn {
+    flex: 1 1 100%;
+  }
 }
 
 /* Подпись автора */
 .madeBy {
   text-align: center;
-  margin: 8px 0 40px;
+  margin: 28px 0 40px;
   font-size: 14px;
   font-weight: 300;
   letter-spacing: 0.5px;

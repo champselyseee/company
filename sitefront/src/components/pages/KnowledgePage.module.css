@@ -766,18 +766,3 @@
   line-height: 1.5;
   color: var(--ink);
 }
-
-/* ── Значок-иконка для блоков антиошибок (вариант .problemId) ── */
-.problemIdWarn {
-  flex: 0 0 auto;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 46px;
-  height: 46px;
-  background: var(--coral);
-  color: var(--on-accent);
-  border: 2.5px solid var(--ink);
-  border-radius: 12px;
-  box-shadow: 2px 2px 0 var(--ink);
-}

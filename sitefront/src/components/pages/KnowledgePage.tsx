@@ -3,7 +3,6 @@ import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
 import { Button } from '../ui/Button'
 import { useCountUp } from '../../lib/useCountUp'
 import {
-  KB_ANTI_MISTAKES,
   KB_ARGUMENTS,
   KB_CATEGORIES,
   KB_META,
@@ -15,7 +14,6 @@ import {
   MODES_WITH_DATA,
   filterByCategory,
   searchArguments,
-  type KBAntiMistake,
   type KBArgument,
   type KBLiteraryArgument,
   type KBHistoricalArgument,
@@ -45,7 +43,6 @@ const MODE_ICONS: Record<string, IconCmp> = {
   by_problems: IconCheckDoc,
   top20: IconTrophy,
   strategies: IconFlame,
-  anti_mistakes: IconClose,
 }
 
 /* Правдивая статистика для геро — считаем из реальных данных (meta.stats в JSON
@@ -141,7 +138,6 @@ export function KnowledgePage() {
         {mode === 'by_problems' && <ProblemsTab />}
         {mode === 'top20' && <Top20Tab />}
         {mode === 'strategies' && <StrategiesTab />}
-        {mode === 'anti_mistakes' && <AntiMistakesTab />}
         {!MODES_WITH_DATA.has(mode) && (
           <ComingSoon
             title={KB_MODES.find((m) => m.id === mode)?.label ?? 'Раздел'}
@@ -599,72 +595,6 @@ function StrategyCard({ strategy }: { strategy: KBStrategy }) {
                   <p className={styles.blockText}>{tip}</p>
                 </div>
               )}
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
-  )
-}
-
-/* ────────────────────────────────────────
-   Вкладка «Антиошибки»
-   ──────────────────────────────────────── */
-function AntiMistakesTab() {
-  return (
-    <div>
-      <h2 className={styles.h2}>Антиошибки</h2>
-      <p className={styles.hint}>
-        Частые ошибки, из-за которых теряют баллы: путаница авторов и героев, слабая аргументация,
-        оформление. Пробегись по списку перед экзаменом.
-      </p>
-      <div className={styles.problemList}>
-        {KB_ANTI_MISTAKES.map((block) => (
-          <AntiMistakeCard key={block.id} block={block} />
-        ))}
-      </div>
-    </div>
-  )
-}
-
-function AntiMistakeCard({ block }: { block: KBAntiMistake }) {
-  const reduce = useReducedMotion()
-  const [open, setOpen] = useState(false)
-  return (
-    <div className={`${styles.problem} ${open ? styles.problemOpen : ''}`}>
-      <button className={styles.problemHead} onClick={() => setOpen((v) => !v)} aria-expanded={open}>
-        <span className={styles.problemIdWarn} aria-hidden="true">
-          <IconClose size={22} />
-        </span>
-        <span className={styles.problemHeadText}>
-          <span className={styles.problemTitle}>{block.title}</span>
-          <span className={styles.problemQuestions}>{block.items.length} ошибок</span>
-        </span>
-        <span className={`${styles.argChevron} ${open ? styles.argChevronOpen : ''}`} aria-hidden="true">
-          <IconChevron size={20} />
-        </span>
-      </button>
-
-      <AnimatePresence initial={false}>
-        {open && (
-          <motion.div
-            className={styles.argBodyWrap}
-            initial={reduce ? false : { height: 0, opacity: 0 }}
-            animate={{ height: 'auto', opacity: 1 }}
-            exit={reduce ? { opacity: 0 } : { height: 0, opacity: 0 }}
-            transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
-          >
-            <div className={styles.problemBody}>
-              <ul className={styles.mistakeList} style={{ marginTop: 16 }}>
-                {block.items.map((m, i) => (
-                  <li key={i}>
-                    <span className={styles.mistakeMark} aria-hidden="true">
-                      <IconClose size={14} />
-                    </span>
-                    <span>{m}</span>
-                  </li>
-                ))}
-              </ul>
             </div>
           </motion.div>
         )}

@@ -7,10 +7,10 @@ import {
   IconCalendar,
   IconCheck,
   IconClose,
-  IconGrid,
   IconLogin,
   IconMenu,
   IconStar,
+  IconTelegram,
   IconUser,
 } from '../lib/icons'
 import styles from './Header.module.css'
@@ -19,18 +19,14 @@ const NAV_ICONS = {
   check: IconCheck,
   book: IconBook,
   star: IconStar,
-  grid: IconGrid,
+  telegram: IconTelegram,
   calendar: IconCalendar,
   user: IconUser,
 }
 
-/* «Профиль» выводим отдельным аккаунт-блоком. На десктопе он уезжает в правый
-   край, а «Наши проекты» встаёт первым (они меняются местами). */
+/* «Профиль» выводим отдельным аккаунт-блоком у правого края. Остальные разделы —
+   в порядке NAV_ITEMS, «Telegram-бот» последним. */
 const SECTION_ITEMS = NAV_ITEMS.filter((i) => i.id !== 'profile')
-const DESKTOP_SECTIONS = [
-  ...SECTION_ITEMS.filter((i) => i.id === 'projects'),
-  ...SECTION_ITEMS.filter((i) => i.id !== 'projects'),
-]
 
 export function Header({
   current,
@@ -99,7 +95,7 @@ export function Header({
 
           {/* Десктоп-навигация: разделы, аккаунт-блок — у правого края */}
           <nav className={styles.nav} aria-label="Основная навигация">
-            {DESKTOP_SECTIONS.map((item) => {
+            {SECTION_ITEMS.map((item) => {
               const Icon = NAV_ICONS[item.iconKey]
               const active = current === item.id
               return (
