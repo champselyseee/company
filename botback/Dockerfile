@@ -18,7 +18,7 @@ WORKDIR /app
 COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Затем код: общий core/ (бот делает `from core import db, grok, grok_check`) и сам botback/.
+# Затем код: общий core/ (бот делает `from core import claude, db, grok`) и сам botback/.
 COPY core/ ./core/
 COPY botback/ ./botback/
 

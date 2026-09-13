@@ -22,9 +22,9 @@ from aiohttp import web
 from . import config
 
 try:  # как пакет (core.db) или как одиночные модули — как в остальном коде бота
-    from core import db, grok, grok_check
+    from core import claude, db, grok
 except ImportError:  # pragma: no cover
-    import db, grok, grok_check  # type: ignore
+    import claude, db, grok  # type: ignore
 
 log = logging.getLogger(__name__)
 
@@ -236,11 +236,13 @@ async def handle_check(request):
     if kind is None:
         return _json({"error": "no_checks"}, 402)  # проверки закончились
     try:
-        answer = await grok_check.check_work(
+        # Проверка — через Claude (core/claude.py), как на сайте: один движок и одни
+        # промпты у обеих служб. Grok остаётся только для распознавания фото (/api/ocr).
+        answer = await claude.check_work(
             user_id, work_type, text=text, photos=photos,
             file_name=file_name, file_text=file_text, source="bot",
         )
-    except grok_check.GrokCheckError as e:
+    except claude.ClaudeError as e:
         await asyncio.to_thread(db.refund_check, user_id, kind)  # ИИ не ответил — вернуть
         return _json({"error": str(e)}, 502)
     except Exception:
