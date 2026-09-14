@@ -17,7 +17,7 @@ from telegram.ext import (
     filters,
 )
 
-from . import config
+from . import config, reminders
 from .handlers import commands
 from .webapp import run_web
 
@@ -41,6 +41,7 @@ def build_application():
     app.add_handler(CommandHandler("balance", commands.balance))
     app.add_handler(CommandHandler("history", commands.history_cmd))
     app.add_handler(CommandHandler("buy", commands.buy))
+    app.add_handler(CommandHandler("ref", commands.ref))
 
     # Обычное сообщение (текст/фото) в чате — подсказываем открыть мини-аппу.
     app.add_handler(MessageHandler(filters.PHOTO, commands.open_app_hint))
@@ -50,13 +51,16 @@ def build_application():
 
 
 async def main() -> None:
-    # Веб-сервер мини-аппы (эндпоинты initData) — в том же процессе и event loop, что и polling.
-    await run_web()
     app = build_application()
-    log.info("Бот запущен (long-polling + веб-сервер мини-аппы).")
     async with app:
+        # Веб-сервер мини-аппы и вебхука — в том же процессе и event loop, что и polling.
+        # Запускаем после инициализации бота: вебхуку нужен app.bot, чтобы писать в Telegram.
+        await run_web(app.bot)
+        log.info("Бот запущен (long-polling + веб-сервер мини-аппы).")
         await app.start()
         await app.updater.start_polling()
+        # Напоминания — фоновая задача в том же event loop. Ссылку держим, чтобы задачу не собрал GC.
+        reminders_task = asyncio.create_task(reminders.run_loop(app.bot))  # noqa: F841
         await asyncio.Event().wait()
 
 

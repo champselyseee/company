@@ -294,29 +294,53 @@ async def handle_yukassa_webhook(request):
     if not payment_id or not tg_id or not payload:
         return web.Response(status=200)
 
-    def _grant() -> None:
+    def _grant() -> int | None:
+        """Начисляет покупку. Возвращает users.id пригласившего, если ему дали бонус."""
         user = db.get_or_create_telegram_user(tg_id)
         uid = user["id"]
         # Идемпотентность: повторные уведомления НЕ начисляют дважды.
         if not db.mark_payment_processed(payment_id, user_id=uid, provider="yookassa"):
-            return
+            return None
         if payload == "rub_month":
             db.add_subscription(uid, 30)
         elif payload == "rub_5":
             db.add_paid_checks(uid, 5)
         else:
             db.add_paid_checks(uid, 1)
-        db.reward_referrer(uid)  # реферальный бонус (идемпотентно по флагу rewarded)
+        return db.reward_referrer(uid)  # реферальный бонус (идемпотентно по флагу rewarded)
 
-    await asyncio.to_thread(_grant)
+    referrer_id = await asyncio.to_thread(_grant)
+    await _notify_referrer(request.app.get(BOT_KEY), referrer_id)
     return web.Response(status=200)
+
+
+async def _notify_referrer(bot, referrer_id: int | None) -> None:
+    """Пишет пригласившему в Telegram, что ему начислен бонус. Сбой не критичен — только лог."""
+    if bot is None or referrer_id is None:
+        return
+    try:
+        referrer = await asyncio.to_thread(db.get_user_by_id, referrer_id)
+        if referrer and referrer.get("telegram_id"):
+            await bot.send_message(
+                chat_id=referrer["telegram_id"],
+                text=(
+                    "🎉 Друг, которого ты пригласил, купил проверки — "
+                    "тебе начислена 1 проверка в подарок!\n\nПроверить работу — /start"
+                ),
+            )
+    except Exception:
+        log.warning("Не удалось уведомить пригласившего (users.id=%s)", referrer_id, exc_info=True)
 
 
 # ── Сборка и запуск сервера ──
 
-def build_app() -> web.Application:
+BOT_KEY = web.AppKey("bot", object)  # объект telegram.Bot — чтобы вебхук мог писать в чат
+
+
+def build_app(bot=None) -> web.Application:
     # client_max_size поднят с дефолтного 1 МБ: тело с фото(base64)/PDF бывает больше.
     app = web.Application(client_max_size=MAX_BODY_SIZE)
+    app[BOT_KEY] = bot
     app.router.add_get("/", handle_health)
     app.router.add_get("/api/me", handle_me)
     app.router.add_post("/api/check", handle_check)
@@ -326,8 +350,8 @@ def build_app() -> web.Application:
     return app
 
 
-async def run_web() -> None:
-    runner = web.AppRunner(build_app())
+async def run_web(bot=None) -> None:
+    runner = web.AppRunner(build_app(bot))
     await runner.setup()
     await web.TCPSite(runner, "0.0.0.0", config.PORT).start()
     log.info("Веб-сервер мини-аппы запущен на порту %s", config.PORT)
