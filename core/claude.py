@@ -11,7 +11,10 @@
   • после успешной проверки модуль сам пишет её в общую базу (core/db.py):
     строка в истории + «+1» к публичному счётчику counters.total_checks —
     одной транзакцией через db.record_check();
-  • ошибки отдаются понятным исключением ClaudeError (caller решает, как показать).
+  • ошибки отдаются понятным исключением ClaudeError (caller решает, как показать);
+  • кэш промптов: длинная постоянная инструкция по типу работы идёт первым куском
+    запроса с меткой cache_control, всё изменчивое (фото, задание, работа) — после неё.
+    Сработал ли кэш — видно в логе строкой «Claude usage: … cache_read=N».
 
 Ключи и настройки берутся из переменных окружения:
     ANTHROPIC_API_KEY   — ключ доступа к Anthropic (обязателен)
@@ -54,6 +57,7 @@ REQUEST_TIMEOUT = int(os.environ.get("REQUEST_TIMEOUT", "600"))
 AI_CONCURRENCY  = int(os.environ.get("AI_CONCURRENCY", "10"))
 
 MAX_INPUT_CHARS = 60000  # длиннее — текст работы обрезаем (как в боте)
+MAX_TASK_CHARS = 10000   # длиннее — текст задания обрезаем
 
 log = logging.getLogger(__name__)
 
@@ -334,16 +338,39 @@ def _validate_photo(photo) -> None:
         raise ClaudeError("Некорректное фото: ожидается data:image/...;base64,<данные>")
 
 
-def _build_user_content(prompt: str, combined_text: str, photos):
-    """Собирает поле content для Messages API: с фото — картинки + текст, без — просто текст."""
+def _build_user_content(prompt: str, combined_text: str, photos) -> list[dict]:
+    """Собирает content для Messages API так, чтобы работал кэш промптов.
+
+    Порядок: [промпт типа работы — ПОСТОЯННЫЙ, с меткой кэша] → [фото] → [задание + работа].
+    Кэш — совпадение начала запроса байт-в-байт: system + промпт одинаковы у всех проверок
+    одного типа, поэтому следующая проверка того же типа (в пределах 5 минут) читает это
+    начало из кэша примерно за 0.1 цены. Всё изменчивое — строго ПОСЛЕ метки.
+    """
+    content = [{"type": "text", "text": prompt, "cache_control": {"type": "ephemeral"}}]
+    content.extend(_image_block(p) for p in photos or [])
+    tail = combined_text
     if photos:
-        content = [_image_block(p) for p in photos]
-        content.append({
-            "type": "text",
-            "text": "Вот фото/файл задания и текст работы.\n\n" + prompt + combined_text,
-        })
-        return content
-    return prompt + combined_text
+        tail = "Выше — фото/файл задания."
+        if combined_text.strip():
+            tail += "\n\nТекст работы:\n\n" + combined_text
+    if tail.strip():
+        content.append({"type": "text", "text": tail})
+    return content
+
+
+def _log_usage(work_type: str, message) -> None:
+    """Пишет в лог расход токенов — по cache_read видно, срабатывает ли кэш промпта."""
+    usage = getattr(message, "usage", None)
+    if usage is None:
+        return
+    log.info(
+        "Claude usage: type=%s model=%s input=%s cache_write=%s cache_read=%s output=%s",
+        work_type, MODEL,
+        getattr(usage, "input_tokens", 0) or 0,
+        getattr(usage, "cache_creation_input_tokens", 0) or 0,
+        getattr(usage, "cache_read_input_tokens", 0) or 0,
+        getattr(usage, "output_tokens", 0) or 0,
+    )
 
 
 async def check_work(
@@ -354,6 +381,7 @@ async def check_work(
     photos: list[str] | None = None,
     file_name: str | None = None,
     file_text: str | None = None,
+    task_text: str | None = None,
     source: str = "bot",
     record: bool = True,
 ) -> str:
@@ -362,6 +390,8 @@ async def check_work(
     user_id — ВНУТРЕННИЙ users.id (не telegram_id): caller сначала находит/создаёт
     пользователя через db.get_or_create_*(), а сюда передаёт users.id.
     work_type — один из ключей PROMPTS ('email' | 'essay' | 'composition').
+    task_text — текст задания (сайт: вставленный или распознанный с фото/PDF), если есть;
+    работой он не считается — пустую работу с одним заданием не проверяем.
 
     После успешного ответа зовёт db.record_check(...), которая ОДНОЙ транзакцией
     пишет строку в историю и +1 к публичному счётчику counters.total_checks.
@@ -381,6 +411,9 @@ async def check_work(
         _validate_photo(_photo)
     if len(combined_text) > MAX_INPUT_CHARS:
         combined_text = combined_text[:MAX_INPUT_CHARS] + "\n\n[Текст был обрезан до 60000 символов.]"
+    if task_text and task_text.strip():
+        task = task_text.strip()[:MAX_TASK_CHARS]
+        combined_text = f"--- Текст задания ---\n{task}\n\n--- Работа ученика ---\n{combined_text}"
 
     create_kwargs = {
         "model": MODEL,
@@ -405,8 +438,13 @@ async def check_work(
                 message = await stream.get_final_message()
     except anthropic.APITimeoutError as e:
         raise ClaudeError("Таймаут ответа от ИИ") from e
+    except anthropic.APIConnectionError as e:
+        # Обрыв связи / DNS (SDK уже сам повторил запрос). Таймаут — подкласс, пойман выше.
+        raise ClaudeError("Нет связи с ИИ, попробуйте ещё раз") from e
     except anthropic.APIStatusError as e:
         raise ClaudeError(f"Anthropic error: {str(e)[:200]}") from e
+
+    _log_usage(work_type, message)
 
     if message.stop_reason == "refusal":
         raise ClaudeError("Модель отклонила запрос")

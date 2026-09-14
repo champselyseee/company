@@ -2,7 +2,8 @@
 # core/ — работа с базой и ИИ:
 psycopg[binary,pool]>=3.2
 python-dotenv>=1.0.1
-anthropic>=0.40.0
+# output_config и adaptive thinking нужны свежие; 2.x может сломать API — не берём сам.
+anthropic>=1.5,<2
 openai>=1.0.0
 
 # siteback/ — веб-бэкенд сайта:
@@ -17,4 +18,4 @@ httpx>=0.27
 # botback/ — Telegram-бот:
 python-telegram-bot>=21.6
 aiohttp>=3.9
-pypdf>=4.0
+pypdf>=4.0  # PDF → текст: вложения в мини-аппе и «файл задания» на сайте

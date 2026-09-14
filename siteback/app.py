@@ -12,6 +12,7 @@ from __future__ import annotations
 
 
 import base64
+import io
 import logging
 import secrets
 import time
@@ -38,6 +39,16 @@ except ImportError:  # pragma: no cover
     from grok import ocr as grok_ocr, GrokError  # type: ignore
 
 log = logging.getLogger("siteback")
+
+# Логи общего core/ уровня INFO (напр. «Claude usage: … cache_read=N» — срабатывает ли кэш
+# промпта). uvicorn настраивает только свои логгеры, без этого такие строки не видны.
+_core_log = logging.getLogger("core")
+if not _core_log.handlers:
+    _handler = logging.StreamHandler()
+    _handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s"))
+    _core_log.addHandler(_handler)
+    _core_log.propagate = False  # не дублировать, если корневой логгер тоже настроят
+_core_log.setLevel(logging.INFO)
 
 app = FastAPI(title="ЕГЭ-чекер · siteback", docs_url="/api/docs", openapi_url="/api/openapi.json")
 
@@ -222,12 +233,18 @@ async def create_check(body: CheckBody, user: dict = Depends(current_user)) -> d
             user_id=user["id"],
             work_type=body.workType,
             text=body.studentText,
+            task_text=body.taskText,  # задание тоже уходит в Claude (раньше доходило только до ответа)
             source="site",
         )
     except ClaudeError as e:
         # ИИ не ответил — возвращаем зарезервированную проверку, чтобы не потерять её зря.
         await run_in_threadpool(db.refund_check, user["id"], kind)
         raise HTTPException(status_code=502, detail=f"ИИ не смог проверить работу: {e}") from e
+    except Exception as e:
+        # Любой другой сбой — тоже возвращаем проверку (как в боте), иначе она сгорит.
+        await run_in_threadpool(db.refund_check, user["id"], kind)
+        log.exception("Проверка на сайте не удалась (user_id=%s)", user["id"])
+        raise HTTPException(status_code=500, detail="Не удалось проверить работу, проверка возвращена") from e
 
     fresh = await run_in_threadpool(db.get_user_by_id, user["id"])
     result = serializers.parse_result(answer)
@@ -236,12 +253,32 @@ async def create_check(body: CheckBody, user: dict = Depends(current_user)) -> d
     return {"result": result, "balance": serializers.compute_balance(fresh)}
 
 
+def _pdf_text(raw: bytes) -> str:
+    """Текст из PDF (текстовый слой). Скан без текстового слоя → пустая строка."""
+    from pypdf import PdfReader  # ленивый импорт: нужен только для PDF
+
+    reader = PdfReader(io.BytesIO(raw))
+    return "\n".join((page.extract_text() or "") for page in reader.pages).strip()
+
+
 @app.post("/api/ocr")
 async def recognize(image: UploadFile = File(...), user: dict = Depends(current_user)) -> dict:
     content_type = image.content_type or ""
-    if not content_type.startswith("image/"):
-        raise HTTPException(status_code=400, detail="Нужен файл-изображение")
+    filename = (image.filename or "").lower()
     raw = await image.read()
+    # PDF (кнопка «Файл задания»): достаём текстовый слой сами, без ИИ.
+    if content_type == "application/pdf" or filename.endswith(".pdf"):
+        try:
+            text = await run_in_threadpool(_pdf_text, raw)
+        except Exception as e:  # битый или зашифрованный PDF
+            raise HTTPException(status_code=400, detail="Не удалось прочитать PDF") from e
+        if not text:
+            raise HTTPException(
+                status_code=400, detail="В PDF нет текста (похоже на скан) — загрузите фото задания"
+            )
+        return {"text": text}
+    if not content_type.startswith("image/"):
+        raise HTTPException(status_code=400, detail="Нужно фото или PDF")
     data_url = f"data:{content_type};base64,{base64.b64encode(raw).decode()}"
     try:
         text = await grok_ocr(data_url)
