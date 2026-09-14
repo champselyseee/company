@@ -353,6 +353,112 @@ def reward_referrer(referred_id: int) -> int | None:
         return referrer_id
 
 
+def referral_stats(referrer_id: int) -> tuple[int, int]:
+    """(сколько человек пригласил, сколько из них уже принесли бонус — т.е. оплатили)."""
+    with _conn() as conn:
+        row = conn.execute(
+            "SELECT COUNT(*) AS total, COUNT(*) FILTER (WHERE rewarded) AS rewarded "
+            "FROM referrals WHERE referrer_id = %s",
+            (referrer_id,),
+        ).fetchone()
+        return row["total"], row["rewarded"]
+
+
+# ── Напоминания ──
+# Функции «забирают» (claim) пользователей, которым пора напомнить: отмечают отправку
+# в той же транзакции и возвращают, кому писать. Отметка ДО отправки + SKIP LOCKED —
+# даже два одновременно запущенных бота не пришлют одно напоминание дважды.
+
+INACTIVE_AFTER = timedelta(days=3)          # столько молчания — повод напомнить
+INACTIVE_ACTIVE_WINDOW = timedelta(days=30)  # давно ушедших (активность старше) не трогаем
+INACTIVE_REPEAT_EVERY = timedelta(days=7)    # повтор не чаще раза в неделю
+INACTIVE_MAX_REMINDERS = 2                   # максимум напоминаний подряд без новой активности
+SUB_END_REMIND_BEFORE = timedelta(days=3)    # за сколько до конца подписки предупредить
+
+
+def claim_inactive_reminders(limit: int = 200) -> list[dict]:
+    """Кому пора «давно не проверял работу». Возвращает [{id, telegram_id, username}].
+
+    Активность = последняя проверка (history), а если проверок не было — регистрация.
+    Условия: молчит больше INACTIVE_AFTER, но активность свежее INACTIVE_ACTIVE_WINDOW;
+    с последней активности напоминаний не было, либо было меньше INACTIVE_MAX_REMINDERS
+    и последнее — раньше INACTIVE_REPEAT_EVERY. Новая проверка обнуляет счётчик
+    (напоминание «старше» активности считается прошлым периодом молчания).
+    """
+    now = _now()
+    params = {
+        "now": now,
+        "quiet_since": now - INACTIVE_AFTER,
+        "active_since": now - INACTIVE_ACTIVE_WINDOW,
+        "repeat_since": now - INACTIVE_REPEAT_EVERY,
+        "max": INACTIVE_MAX_REMINDERS,
+        "limit": limit,
+    }
+    with _conn() as conn:
+        rows = conn.execute(
+            """
+            WITH due AS (
+                SELECT u.id, a.last_act
+                FROM users u
+                CROSS JOIN LATERAL (
+                    SELECT COALESCE(
+                        (SELECT max(h.created_at) FROM history h WHERE h.user_id = u.id),
+                        u.created_at
+                    ) AS last_act
+                ) a
+                WHERE u.telegram_id IS NOT NULL
+                  AND a.last_act < %(quiet_since)s
+                  AND a.last_act > %(active_since)s
+                  AND (
+                        u.inactive_reminded_at IS NULL
+                     OR u.inactive_reminded_at < a.last_act
+                     OR (u.inactive_reminders < %(max)s AND u.inactive_reminded_at < %(repeat_since)s)
+                  )
+                LIMIT %(limit)s
+                FOR UPDATE OF u SKIP LOCKED
+            )
+            UPDATE users SET
+                inactive_reminders = CASE
+                    WHEN users.inactive_reminded_at IS NULL OR users.inactive_reminded_at < due.last_act
+                    THEN 1 ELSE users.inactive_reminders + 1 END,
+                inactive_reminded_at = %(now)s
+            FROM due
+            WHERE users.id = due.id
+            RETURNING users.id, users.telegram_id, users.username
+            """,
+            params,
+        ).fetchall()
+        conn.commit()
+        return rows
+
+
+def claim_subscription_end_reminders(limit: int = 200) -> list[dict]:
+    """Кому пора «подписка скоро закончится» — один раз на каждую дату конца подписки.
+
+    Возвращает [{id, telegram_id, username, subscription_until}].
+    """
+    now = _now()
+    with _conn() as conn:
+        rows = conn.execute(
+            """
+            UPDATE users SET sub_end_reminded_for = subscription_until
+            WHERE id IN (
+                SELECT id FROM users
+                WHERE telegram_id IS NOT NULL
+                  AND subscription_until > %s
+                  AND subscription_until <= %s
+                  AND sub_end_reminded_for IS DISTINCT FROM subscription_until
+                LIMIT %s
+                FOR UPDATE SKIP LOCKED
+            )
+            RETURNING id, telegram_id, username, subscription_until
+            """,
+            (now, now + SUB_END_REMIND_BEFORE, limit),
+        ).fetchall()
+        conn.commit()
+        return rows
+
+
 # ── Платежи ──
 
 def mark_payment_processed(

@@ -42,6 +42,22 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS sub_month TEXT
 
 ;
 
+-- Напоминания бота (botback/reminders.py, правила в core/db.py claim_*_reminders).
+-- inactive_reminders — сколько «давно не проверял» отправлено с последней активности,
+-- inactive_reminded_at — когда отправлено последнее из них,
+-- sub_end_reminded_for — для какой даты конца подписки уже напомнили (продлил подписку — напомним снова).
+ALTER TABLE users ADD COLUMN IF NOT EXISTS inactive_reminders INTEGER NOT NULL DEFAULT 0
+
+;
+
+ALTER TABLE users ADD COLUMN IF NOT EXISTS inactive_reminded_at TIMESTAMPTZ
+
+;
+
+ALTER TABLE users ADD COLUMN IF NOT EXISTS sub_end_reminded_for TIMESTAMPTZ
+
+;
+
 -- История проверок (и бот, и сайт). source помечает, откуда пришла проверка.
 CREATE TABLE IF NOT EXISTS history (
     id         BIGSERIAL PRIMARY KEY,
