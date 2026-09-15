@@ -1,4 +1,4 @@
-"""Команды бота: /start, /help, /balance, /history, /ref. Оплата (/buy) — пока заглушка.
+"""Команды бота: /start, /help, /balance, /history, /ref, /buy (оплата через ЮKassa).
 
 Проверка работ — только через мини-аппу (см. botback/webapp.py). На любое обычное
 сообщение в чате отвечаем подсказкой открыть приложение (open_app_hint).
@@ -14,13 +14,13 @@ from telegram.ext import ContextTypes
 
 from .. import config
 from ..formatting import WORK_TYPE_NAMES
-from ..keyboards import main_keyboard
+from ..keyboards import BUY_PREFIX, main_keyboard, offers_keyboard, pay_keyboard
 
-# Общая база из core/. Пробуем как пакет (core.db) и как одиночный модуль (db).
+# Общий код из core/. Пробуем как пакет (core.db) и как одиночные модули (db).
 try:
-    from core import db
+    from core import catalog, db, yookassa
 except ImportError:
-    import db
+    import catalog, db, yookassa  # type: ignore
 
 log = logging.getLogger(__name__)
 
@@ -92,7 +92,7 @@ async def balance(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     row = await asyncio.to_thread(db.get_or_create_telegram_user, user.id, user.username or None)
     if db.has_subscription(row):
         left = db.subscription_left(row)
-        text = f"📅 Подписка активна: осталось {left} из {db.SUBSCRIPTION_MONTHLY_QUOTA} проверок в этом месяце."
+        text = f"📅 Подписка активна: осталось {left} из {db.subscription_quota(row)} проверок в этом месяце."
     else:
         free_left = 0 if row.get("free_used") else 1
         paid = row.get("paid_checks", 0) or 0
@@ -103,10 +103,43 @@ async def balance(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 
 async def buy(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """/buy — оплата (заглушка на этом этапе; подключим следующим шагом)."""
+    """/buy — список тарифов кнопками; нажатие обрабатывает buy_callback."""
     await update.message.reply_text(
-        "💳 Оплата скоро появится. Пока по вопросам доступа пиши "
-        f"{config.SUPPORT_CONTACT}."
+        "💳 Выбери тариф — после оплаты проверки начислятся автоматически.",
+        reply_markup=offers_keyboard(),
+    )
+
+
+async def buy_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Кнопка тарифа из /buy: создаём платёж в ЮKassa и присылаем ссылку на оплату."""
+    query = update.callback_query
+    await query.answer()
+    try:
+        kind, offer_id = (query.data or "")[len(BUY_PREFIX):].split(":", 1)
+    except ValueError:
+        return
+    offer = catalog.get_offer(kind, offer_id)
+    if offer is None:
+        await query.message.reply_text("Такого тарифа уже нет — открой /buy ещё раз.")
+        return
+    user = update.effective_user
+    row = await asyncio.to_thread(db.get_or_create_telegram_user, user.id, user.username or None)
+    try:
+        url = await yookassa.create_payment(
+            row["id"], kind, offer_id,
+            return_url=f"https://t.me/{context.bot.username}", source="bot",
+        )
+    except yookassa.YooKassaError as e:
+        log.warning("Не удалось создать платёж (tg=%s, %s:%s): %s", user.id, kind, offer_id, e)
+        await query.message.reply_text(
+            f"❌ Не получилось создать оплату ({e}). Попробуй позже или напиши {config.SUPPORT_CONTACT}."
+        )
+        return
+    title = offer["title"][:1].upper() + offer["title"][1:]
+    await query.message.reply_text(
+        f"💳 {title} — {offer['price']} ₽\n\n"
+        "Нажми кнопку, чтобы оплатить. Проверки начислятся автоматически, я напишу, когда оплата пройдёт.",
+        reply_markup=pay_keyboard(url, offer["price"]),
     )
 
 

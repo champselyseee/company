@@ -22,9 +22,9 @@ from aiohttp import web
 from . import config
 
 try:  # как пакет (core.db) или как одиночные модули — как в остальном коде бота
-    from core import claude, db, grok
+    from core import claude, db, grok, yookassa
 except ImportError:  # pragma: no cover
-    import claude, db, grok  # type: ignore
+    import claude, db, grok, yookassa  # type: ignore
 
 log = logging.getLogger(__name__)
 
@@ -271,47 +271,43 @@ async def handle_ocr(request):
 # ── Вебхук ЮKassa (оплата) ──
 
 async def handle_yukassa_webhook(request):
-    """Уведомление ЮKassa (payment.succeeded) → начисление в общий Postgres.
+    """Уведомление ЮKassa → проверка платежа в API ЮKassa → начисление (core/yookassa.py).
 
-    Тело доверяем (как в старом боте). ВСЕГДА отвечаем 200, иначе ЮKassa шлёт повторы.
-    Платёж создаёт магазин с metadata.user_id (Telegram id) и metadata.payload.
-    Идемпотентность — через mark_payment_processed (ЮKassa может слать повторы).
+    Телу уведомления не верим: core.yookassa переспрашивает платёж по id и начисляет
+    ровно один раз. Платежи и бота, и сайта приходят сюда (один адрес в кабинете).
+    Ответы: 200 — принято (в т.ч. «не наше событие» и повтор); 400 — битый JSON;
+    503/500 — не смогли проверить или начислить → ЮKassa пришлёт уведомление ещё раз.
     """
     try:
         body = await request.json()
     except Exception:
         return web.Response(status=400)
-    if body.get("event") != "payment.succeeded":
-        return web.Response(status=200)  # не наше событие — просто подтверждаем
-    obj = body.get("object") or {}
-    meta = obj.get("metadata") or {}
-    payment_id = obj.get("id")
-    payload = meta.get("payload") or ""
     try:
-        tg_id = int(meta.get("user_id", 0))
-    except (TypeError, ValueError):
-        tg_id = 0
-    if not payment_id or not tg_id or not payload:
-        return web.Response(status=200)
-
-    def _grant() -> int | None:
-        """Начисляет покупку. Возвращает users.id пригласившего, если ему дали бонус."""
-        user = db.get_or_create_telegram_user(tg_id)
-        uid = user["id"]
-        # Идемпотентность: повторные уведомления НЕ начисляют дважды.
-        if not db.mark_payment_processed(payment_id, user_id=uid, provider="yookassa"):
-            return None
-        if payload == "rub_month":
-            db.add_subscription(uid, 30)
-        elif payload == "rub_5":
-            db.add_paid_checks(uid, 5)
-        else:
-            db.add_paid_checks(uid, 1)
-        return db.reward_referrer(uid)  # реферальный бонус (идемпотентно по флагу rewarded)
-
-    referrer_id = await asyncio.to_thread(_grant)
-    await _notify_referrer(request.app.get(BOT_KEY), referrer_id)
+        grant = await yookassa.handle_notification(body)
+    except yookassa.YooKassaError as e:
+        log.warning("ЮKassa: не удалось проверить уведомление: %s", e)
+        return web.Response(status=503)
+    except Exception:
+        log.exception("ЮKassa: сбой обработки уведомления")
+        return web.Response(status=500)
+    if grant:
+        bot = request.app.get(BOT_KEY)
+        await _notify_buyer(bot, grant)
+        await _notify_referrer(bot, grant.get("referrer_id"))
     return web.Response(status=200)
+
+
+async def _notify_buyer(bot, grant: dict) -> None:
+    """Пишет покупателю в Telegram, что оплата прошла (если у него есть Telegram). Сбой — только лог."""
+    if bot is None or not grant.get("telegram_id"):
+        return
+    try:
+        await bot.send_message(
+            chat_id=grant["telegram_id"],
+            text=f"✅ Оплата прошла: {grant['title']}.\n\nПроверить работу — /start",
+        )
+    except Exception:
+        log.warning("Не удалось уведомить покупателя (users.id=%s)", grant.get("user_id"), exc_info=True)
 
 
 async def _notify_referrer(bot, referrer_id: int | None) -> None:

@@ -23,9 +23,10 @@ FREE_PLAN = "Бесплатный"
 # ── Пользователь и баланс ──
 
 def compute_balance(user: dict) -> int:
-    """Сколько проверок доступно прямо сейчас: оплаченные + бесплатная (если не потрачена)."""
+    """Сколько проверок доступно прямо сейчас: остаток месячной нормы подписки + оплаченные +
+    бесплатная (если не потрачена) — так же, как checksLeft в /api/me мини-аппы бота."""
     free = 0 if user.get("free_used") else 1
-    return int(user.get("paid_checks") or 0) + free
+    return db.subscription_left(user) + int(user.get("paid_checks") or 0) + free
 
 
 def plan_name(user: dict) -> str:

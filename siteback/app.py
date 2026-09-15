@@ -33,10 +33,12 @@ try:
     from core import db
     from core.claude import check_work, ClaudeError
     from core.grok import ocr as grok_ocr, GrokError
+    from core import yookassa
 except ImportError:  # pragma: no cover
     import db  # type: ignore
     from claude import check_work, ClaudeError  # type: ignore
     from grok import ocr as grok_ocr, GrokError  # type: ignore
+    import yookassa  # type: ignore
 
 log = logging.getLogger("siteback")
 
@@ -301,34 +303,40 @@ def profile(user: dict = Depends(current_user)) -> dict:
     return serializers.profile_payload(rows)
 
 
-# ── Оплата (пока режим-заглушка) ──
+# ── Оплата ──
+# PAYMENTS_MODE: 'yookassa' — настоящая оплата; 'stub' — заглушка для разработки
+# (сразу «оплачено»); любое другое значение (напр. 'off') — оплата выключена (501).
 
 @app.post("/api/payments")
-def create_payment(body: PaymentBody, user: dict = Depends(current_user)) -> dict:
-    if body.kind == "package":
-        item = catalog.PACKAGES.get(body.id)
-        checks, days = (item["checks"], 0) if item else (None, 0)
-    elif body.kind == "plan":
-        item = catalog.PLANS.get(body.id)
-        checks, days = (item["checks_per_month"], item["days"]) if item else (None, 0)
-    else:
+async def create_payment(body: PaymentBody, user: dict = Depends(current_user)) -> dict:
+    if body.kind not in ("package", "plan"):
         raise HTTPException(status_code=400, detail="Неизвестный вид покупки")
-    if item is None:
+    # Цену и что начислить решает сервер по каталогу, а не данные из запроса.
+    offer = catalog.get_offer(body.kind, body.id)
+    if offer is None:
         raise HTTPException(status_code=400, detail="Неизвестный тариф")
 
+    if config.PAYMENTS_MODE == "yookassa":
+        if body.method != "yookassa":
+            raise HTTPException(status_code=400, detail="Оплата Stars — только в Telegram-боте")
+        try:
+            url = await yookassa.create_payment(
+                user["id"], body.kind, body.id, return_url=config.FRONT_REDIRECT_URL, source="site"
+            )
+        except yookassa.YooKassaError as e:
+            raise HTTPException(status_code=502, detail=f"Не удалось создать оплату: {e}") from e
+        # Проверки начислит вебхук ЮKassa после оплаты (core/yookassa.handle_notification).
+        return {"confirmationUrl": url, "status": "pending"}
+
     if config.PAYMENTS_MODE != "stub":
-        # Реальную ЮKassa/Stars подключим отдельным шагом (создание платежа + вебхук).
         raise HTTPException(status_code=501, detail="Оплата ещё не подключена")
 
-    # Режим-заглушка: считаем, что оплата прошла сразу, и начисляем проверки.
+    # Режим-заглушка (только для разработки): считаем, что оплата прошла сразу.
     payment_id = f"stub-{user['id']}-{int(time.time())}-{secrets.token_hex(4)}"
-    is_new = db.mark_payment_processed(
-        payment_id, user_id=user["id"], amount=item["price"], provider=body.method
+    await run_in_threadpool(
+        db.grant_payment, payment_id, user["id"], offer["price"],
+        checks=offer["checks"], days=offer["days"], quota=offer["quota"], provider=body.method,
     )
-    if is_new:
-        db.add_paid_checks(user["id"], checks)
-        if days:
-            db.add_subscription(user["id"], days=days)
     return {"status": "paid"}
 
 

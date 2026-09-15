@@ -42,6 +42,12 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS sub_month TEXT
 
 ;
 
+-- Месячная норма купленной подписки (30 / 60 / 120 — из core/catalog.py). NULL у старых
+-- подписок = SUBSCRIPTION_MONTHLY_QUOTA (30).
+ALTER TABLE users ADD COLUMN IF NOT EXISTS sub_quota INTEGER
+
+;
+
 -- Напоминания бота (botback/reminders.py, правила в core/db.py claim_*_reminders).
 -- inactive_reminders — сколько «давно не проверял» отправлено с последней активности,
 -- inactive_reminded_at — когда отправлено последнее из них,
