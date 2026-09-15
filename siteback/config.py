@@ -42,8 +42,9 @@ COOKIE_SECURE = os.environ.get("COOKIE_SECURE", "true").lower() == "true"
 COOKIE_SAMESITE = os.environ.get("COOKIE_SAMESITE", "none").lower()  # none | lax | strict
 
 # ── Платежи ──
-# 'stub' — режим-заглушка: платёж сразу помечается оплаченным и проверки начисляются
-# (для разработки, реальных денег нет). Позже добавим 'yookassa'.
+# 'yookassa' — настоящая оплата (core/yookassa.py, ключи YUKASSA_SHOP_ID/YUKASSA_SECRET);
+# 'stub' — заглушка: платёж сразу помечается оплаченным (для разработки, денег нет);
+# любое другое значение (напр. 'off') — оплата выключена.
 PAYMENTS_MODE = os.environ.get("PAYMENTS_MODE", "stub").lower()
 
 # ── OAuth (входы через сторонние сервисы) ──

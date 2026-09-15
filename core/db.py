@@ -200,18 +200,36 @@ def use_paid_check(user_id: int) -> None:
         conn.commit()
 
 
-def add_subscription(user_id: int, days: int = 30) -> datetime:
-    """Продлевает подписку: от текущего конца (если ещё активна) либо от сейчас."""
+def _add_subscription_tx(conn, user_id: int, days: int, quota: int | None) -> datetime:
+    """Продление подписки ВНУТРИ уже открытой транзакции (без commit).
+
+    Срок — от текущего конца (если подписка ещё активна) либо от сейчас. quota — месячная
+    норма тарифа: при активной подписке берём большую из текущей и новой (купил «Месяц»
+    поверх «Года» — 120 не падает); None — оставить норму активной подписки как есть
+    (у истёкшей — сбросить к умолчанию 30).
+    """
+    row = conn.execute(
+        "SELECT subscription_until, sub_quota FROM users WHERE id = %s FOR UPDATE", (user_id,)
+    ).fetchone()
+    now = _now()
+    active = bool(row and row["subscription_until"] and row["subscription_until"] > now)
+    new_until = (row["subscription_until"] if active else now) + timedelta(days=days)
+    current_quota = row["sub_quota"] if (row and active) else None
+    if quota is None:
+        new_quota = current_quota
+    else:
+        new_quota = max(quota, current_quota or 0)
+    conn.execute(
+        "UPDATE users SET subscription_until = %s, sub_quota = %s WHERE id = %s",
+        (new_until, new_quota, user_id),
+    )
+    return new_until
+
+
+def add_subscription(user_id: int, days: int = 30, quota: int | None = None) -> datetime:
+    """Продлевает подписку на days дней (quota — месячная норма тарифа, см. _add_subscription_tx)."""
     with _conn() as conn:
-        row = conn.execute(
-            "SELECT subscription_until FROM users WHERE id = %s", (user_id,)
-        ).fetchone()
-        now = _now()
-        current = row["subscription_until"] if row and row["subscription_until"] and row["subscription_until"] > now else now
-        new_until = current + timedelta(days=days)
-        conn.execute(
-            "UPDATE users SET subscription_until = %s WHERE id = %s", (new_until, user_id)
-        )
+        new_until = _add_subscription_tx(conn, user_id, days, quota)
         conn.commit()
         return new_until
 
@@ -219,6 +237,11 @@ def add_subscription(user_id: int, days: int = 30) -> datetime:
 def has_subscription(user: dict) -> bool:
     su = user.get("subscription_until")
     return su is not None and su > _now()
+
+
+def subscription_quota(user: dict) -> int:
+    """Месячная норма подписки пользователя (sub_quota; NULL у старых подписок = 30)."""
+    return user.get("sub_quota") or SUBSCRIPTION_MONTHLY_QUOTA
 
 
 def subscription_left(user: dict) -> int:
@@ -232,7 +255,7 @@ def subscription_left(user: dict) -> int:
     used = user.get("sub_used") or 0
     if user.get("sub_month") != _now().strftime("%Y-%m"):
         used = 0
-    return max(0, SUBSCRIPTION_MONTHLY_QUOTA - used)
+    return max(0, subscription_quota(user) - used)
 
 
 def has_access(user: dict) -> bool:
@@ -254,7 +277,7 @@ def consume_check(user_id: int) -> str | None:
     """
     with _conn() as conn:
         row = conn.execute(
-            "SELECT free_used, paid_checks, subscription_until, sub_used, sub_month "
+            "SELECT free_used, paid_checks, subscription_until, sub_used, sub_month, sub_quota "
             "FROM users WHERE id = %s FOR UPDATE",
             (user_id,),
         ).fetchone()
@@ -264,12 +287,12 @@ def consume_check(user_id: int) -> str | None:
         now = _now()
         su = row["subscription_until"]
         if su is not None and su > now:
-            # Активная подписка: месячная норма SUBSCRIPTION_MONTHLY_QUOTA.
+            # Активная подписка: месячная норма тарифа (sub_quota, по умолчанию 30).
             current_month = now.strftime("%Y-%m")
             used = row["sub_used"] or 0
             if row["sub_month"] != current_month:
                 used = 0  # новый месяц — норма обнуляется
-            if used < SUBSCRIPTION_MONTHLY_QUOTA:
+            if used < subscription_quota(row):
                 conn.execute(
                     "UPDATE users SET sub_used = %s, sub_month = %s WHERE id = %s",
                     (used + 1, current_month, user_id),
@@ -473,6 +496,41 @@ def mark_payment_processed(
         ).fetchone()
         conn.commit()
         return row is not None
+
+
+def grant_payment(
+    payment_id: str,
+    user_id: int,
+    amount=None,
+    *,
+    checks: int = 0,
+    days: int = 0,
+    quota: int | None = None,
+    provider: str = "yookassa",
+) -> bool:
+    """Атомарно помечает платёж обработанным И начисляет покупку — ОДНОЙ транзакцией.
+
+    True — платёж новый, начислено; False — этот payment_id уже был (повтор уведомления),
+    ничего не делаем. Если начисление упадёт, откатится и пометка, и повтор уведомления
+    начислит заново (раньше пометка и начисление шли разными транзакциями).
+    """
+    with _conn() as conn:
+        row = conn.execute(
+            "INSERT INTO processed_payments (payment_id, user_id, amount, provider) "
+            "VALUES (%s, %s, %s, %s) ON CONFLICT (payment_id) DO NOTHING RETURNING payment_id",
+            (payment_id, user_id, amount, provider),
+        ).fetchone()
+        if row is None:
+            conn.rollback()
+            return False
+        if checks:
+            conn.execute(
+                "UPDATE users SET paid_checks = paid_checks + %s WHERE id = %s", (checks, user_id)
+            )
+        if days:
+            _add_subscription_tx(conn, user_id, days, quota)
+        conn.commit()
+        return True
 
 
 # ── История проверок + публичный счётчик ──

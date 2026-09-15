@@ -12,6 +12,7 @@ import logging
 
 from telegram.ext import (
     ApplicationBuilder,
+    CallbackQueryHandler,
     CommandHandler,
     MessageHandler,
     filters,
@@ -42,6 +43,8 @@ def build_application():
     app.add_handler(CommandHandler("history", commands.history_cmd))
     app.add_handler(CommandHandler("buy", commands.buy))
     app.add_handler(CommandHandler("ref", commands.ref))
+    # Кнопки тарифов из /buy → создание платежа ЮKassa.
+    app.add_handler(CallbackQueryHandler(commands.buy_callback, pattern=r"^buy:"))
 
     # Обычное сообщение (текст/фото) в чате — подсказываем открыть мини-аппу.
     app.add_handler(MessageHandler(filters.PHOTO, commands.open_app_hint))
