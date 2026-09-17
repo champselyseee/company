@@ -7,7 +7,10 @@
     там status=succeeded, paid=true и сумма совпадает с тарифом — ровно один раз
     (db.grant_payment, защита от повторных уведомлений).
 
-Ключи магазина из переменных окружения: YUKASSA_SHOP_ID, YUKASSA_SECRET.
+Ключи магазина из переменных окружения своей службы: YUKASSA_SHOP_ID, YUKASSA_SECRET.
+У бота и сайта могут быть РАЗНЫЕ магазины — поэтому у каждой службы свой вебхук
+(бот: POST /yukassa/webhook, сайт: POST /api/payments/yookassa/webhook), и платёж
+перепроверяется ключами того магазина, где он создан.
 """
 
 from __future__ import annotations

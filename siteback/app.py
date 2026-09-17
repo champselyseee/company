@@ -340,6 +340,30 @@ async def create_payment(body: PaymentBody, user: dict = Depends(current_user)) 
     return {"status": "paid"}
 
 
+@app.post("/api/payments/yookassa/webhook")
+async def yookassa_webhook(request: Request) -> Response:
+    """HTTP-уведомление ЮKassa о платеже магазина САЙТА (этот адрес указывают в кабинете).
+
+    Без авторизации: запрос шлёт сервер ЮKassa. Телу не верим — core.yookassa переспрашивает
+    платёж в API ключами сайта и начисляет ровно один раз (так же, как вебхук бота).
+    Ответы: 200 — принято (в т.ч. «не наше событие» и повтор); 400 — битый JSON;
+    503/500 — не смогли проверить или начислить → ЮKassa пришлёт уведомление ещё раз.
+    """
+    try:
+        body = await request.json()
+    except Exception:
+        return Response(status_code=400)
+    try:
+        await yookassa.handle_notification(body)
+    except yookassa.YooKassaError as e:
+        log.warning("ЮKassa: не удалось проверить уведомление: %s", e)
+        return Response(status_code=503)
+    except Exception:
+        log.exception("ЮKassa: сбой обработки уведомления")
+        return Response(status_code=500)
+    return Response(status_code=200)
+
+
 # ── Публичный счётчик (без авторизации) ──
 
 @app.get("/api/public/total-checks")
