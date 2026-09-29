@@ -12,9 +12,11 @@ CLI для проверки:
     python -m db --selftest   # быстрый прогон: создать юзера, начислить, списать, проверить
 """
 
+import logging
 import os
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
+from decimal import Decimal
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -22,6 +24,8 @@ from psycopg_pool import ConnectionPool
 from psycopg.rows import dict_row
 
 load_dotenv()
+
+log = logging.getLogger(__name__)
 
 DATABASE_URL = os.environ.get("DATABASE_URL")
 SCHEMA_PATH = Path(__file__).with_name("schema.sql")
@@ -73,6 +77,50 @@ def init_schema() -> None:
         for statement in statements:
             conn.execute(statement)
         conn.commit()
+    try:
+        _backfill_purchases()
+    except Exception:  # история покупок не должна мешать запуску сервиса
+        log.exception("Перенос старых оплат в purchases не удался")
+
+
+def _backfill_purchases() -> int:
+    """Переносит в purchases оплаты, начисленные до появления истории покупок.
+
+    Берёт строки processed_payments, которых ещё нет в purchases (кроме бесплатных
+    тестовых stub-… из режима-заглушки), название — по сумме из каталога тарифов.
+    Идемпотентно: после первого запуска ничего не находит. Возвращает число перенесённых.
+    """
+    try:
+        from core import catalog
+    except ImportError:  # запуск из папки core/ (python -m db)
+        import catalog  # type: ignore
+    by_price = {Decimal(o["price"]): o for o in catalog.all_offers()}
+    with _conn() as conn:
+        rows = conn.execute(
+            "SELECT p.payment_id, p.user_id, p.amount, p.provider, p.created_at "
+            "FROM processed_payments p "
+            "WHERE p.user_id IS NOT NULL AND p.payment_id NOT LIKE %s "
+            "AND NOT EXISTS (SELECT 1 FROM purchases pu WHERE pu.payment_id = p.payment_id)",
+            ("stub-%",),
+        ).fetchall()
+        for r in rows:
+            offer = by_price.get(r["amount"]) if r["amount"] is not None else None
+            conn.execute(
+                "INSERT INTO purchases (payment_id, user_id, provider, kind, offer_id, title, "
+                "amount, status, created_at, paid_at) "
+                "VALUES (%s, %s, %s, %s, %s, %s, %s, 'succeeded', %s, %s) "
+                "ON CONFLICT (payment_id) DO NOTHING",
+                (
+                    r["payment_id"], r["user_id"], r["provider"] or "yookassa",
+                    offer["kind"] if offer else None, offer["id"] if offer else None,
+                    offer["title"] if offer else "Покупка",
+                    r["amount"], r["created_at"], r["created_at"],
+                ),
+            )
+        conn.commit()
+    if rows:
+        log.info("В историю покупок перенесено старых оплат: %s", len(rows))
+    return len(rows)
 
 
 # ── Пользователи / идентификация ──
@@ -507,12 +555,18 @@ def grant_payment(
     days: int = 0,
     quota: int | None = None,
     provider: str = "yookassa",
+    title: str | None = None,
+    kind: str | None = None,
+    offer_id: str | None = None,
+    source: str | None = None,
 ) -> bool:
     """Атомарно помечает платёж обработанным И начисляет покупку — ОДНОЙ транзакцией.
 
     True — платёж новый, начислено; False — этот payment_id уже был (повтор уведомления),
     ничего не делаем. Если начисление упадёт, откатится и пометка, и повтор уведомления
     начислит заново (раньше пометка и начисление шли разными транзакциями).
+    В той же транзакции покупка в истории (purchases) становится succeeded — если строки
+    ещё не было (старый платёж, сбой записи при создании), она создаётся.
     """
     with _conn() as conn:
         row = conn.execute(
@@ -529,21 +583,104 @@ def grant_payment(
             )
         if days:
             _add_subscription_tx(conn, user_id, days, quota)
+        conn.execute(
+            "INSERT INTO purchases (payment_id, user_id, source, provider, kind, offer_id, title, "
+            "amount, status, paid_at) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, 'succeeded', now()) "
+            "ON CONFLICT (payment_id) DO UPDATE SET status = 'succeeded', paid_at = now(), "
+            "source = COALESCE(purchases.source, EXCLUDED.source), "
+            "kind = COALESCE(purchases.kind, EXCLUDED.kind), "
+            "offer_id = COALESCE(purchases.offer_id, EXCLUDED.offer_id), "
+            "amount = COALESCE(purchases.amount, EXCLUDED.amount)",
+            (payment_id, user_id, source, provider, kind, offer_id, title or "Покупка", amount),
+        )
         conn.commit()
         return True
 
 
-# ── История проверок + публичный счётчик ──
+# ── История покупок ──
 
-def record_check(user_id: int, work_type: str, result: str, source: str = "bot") -> None:
-    """Атомарно: пишет проверку в историю и увеличивает публичный счётчик total_checks."""
+def create_purchase(
+    payment_id: str,
+    user_id: int,
+    *,
+    title: str,
+    amount=None,
+    source: str | None = None,
+    provider: str = "yookassa",
+    kind: str | None = None,
+    offer_id: str | None = None,
+) -> None:
+    """Записывает созданный, ещё не оплаченный платёж (status = pending). Повтор — ничего."""
     with _conn() as conn:
         conn.execute(
-            "INSERT INTO history (user_id, source, work_type, result) VALUES (%s, %s, %s, %s)",
-            (user_id, source, work_type, result[:3000]),
+            "INSERT INTO purchases (payment_id, user_id, source, provider, kind, offer_id, title, amount) "
+            "VALUES (%s, %s, %s, %s, %s, %s, %s, %s) ON CONFLICT (payment_id) DO NOTHING",
+            (payment_id, user_id, source, provider, kind, offer_id, title, amount),
         )
+        conn.commit()
+
+
+def get_purchase(user_id: int, payment_id: str) -> dict | None:
+    """Покупка по id платежа — только если она принадлежит этому пользователю (иначе None)."""
+    with _conn() as conn:
+        return conn.execute(
+            "SELECT * FROM purchases WHERE payment_id = %s AND user_id = %s",
+            (payment_id, user_id),
+        ).fetchone()
+
+
+def mark_purchase_canceled(payment_id: str) -> None:
+    """ЮKassa отменила платёж: pending → canceled (оплаченные не трогаем)."""
+    with _conn() as conn:
+        conn.execute(
+            "UPDATE purchases SET status = 'canceled' WHERE payment_id = %s AND status = 'pending'",
+            (payment_id,),
+        )
+        conn.commit()
+
+
+def get_purchases(user_id: int, limit: int = 50) -> list[dict]:
+    """Оплаченные покупки пользователя, новые сверху (для профиля)."""
+    with _conn() as conn:
+        return conn.execute(
+            "SELECT id, title, amount, source, provider, kind, offer_id, created_at, paid_at "
+            "FROM purchases WHERE user_id = %s AND status = 'succeeded' "
+            "ORDER BY COALESCE(paid_at, created_at) DESC, id DESC LIMIT %s",
+            (user_id, limit),
+        ).fetchall()
+
+
+# ── История проверок + публичный счётчик ──
+
+def record_check(user_id: int, work_type: str, result: str, source: str = "bot") -> int:
+    """Атомарно: пишет проверку в историю и увеличивает публичный счётчик total_checks.
+
+    Возвращает id новой строки истории (сайт привязывает к нему анкету отзыва).
+    """
+    with _conn() as conn:
+        row = conn.execute(
+            "INSERT INTO history (user_id, source, work_type, result) VALUES (%s, %s, %s, %s) "
+            "RETURNING id",
+            (user_id, source, work_type, result[:3000]),
+        ).fetchone()
         conn.execute("UPDATE counters SET value = value + 1 WHERE name = 'total_checks'")
         conn.commit()
+        return row["id"]
+
+
+def count_checks(user_id: int, source: str | None = None) -> int:
+    """Сколько проверок у пользователя в истории (source — только с сайта/бота; None — все)."""
+    with _conn() as conn:
+        if source is None:
+            row = conn.execute(
+                "SELECT COUNT(*) AS n FROM history WHERE user_id = %s", (user_id,)
+            ).fetchone()
+        else:
+            row = conn.execute(
+                "SELECT COUNT(*) AS n FROM history WHERE user_id = %s AND source = %s",
+                (user_id, source),
+            ).fetchone()
+        return row["n"]
 
 
 def get_history(user_id: int, limit: int = 5) -> list[dict]:
@@ -562,6 +699,40 @@ def get_total_checks() -> int:
             "SELECT value FROM counters WHERE name = 'total_checks'"
         ).fetchone()
         return row["value"] if row else 0
+
+
+# ── Отзывы о проверке ──
+
+def save_feedback(
+    user_id: int,
+    history_id: int,
+    *,
+    satisfaction: int,
+    convenience: int,
+    strictness: str | None = None,
+    strictness_note: str | None = None,
+    missing_note: str | None = None,
+    source: str = "site",
+) -> bool:
+    """Сохраняет анкету по проверке history_id. False — проверки нет или она чужая.
+
+    Одна анкета на проверку: повторная отправка обновляет ответы. work_type берём из истории.
+    """
+    with _conn() as conn:
+        row = conn.execute(
+            "INSERT INTO feedback (user_id, history_id, source, work_type, satisfaction, "
+            "strictness, strictness_note, convenience, missing_note) "
+            "SELECT h.user_id, h.id, %s, h.work_type, %s, %s, %s, %s, %s "
+            "FROM history h WHERE h.id = %s AND h.user_id = %s "
+            "ON CONFLICT (history_id) DO UPDATE SET satisfaction = EXCLUDED.satisfaction, "
+            "strictness = EXCLUDED.strictness, strictness_note = EXCLUDED.strictness_note, "
+            "convenience = EXCLUDED.convenience, missing_note = EXCLUDED.missing_note "
+            "RETURNING id",
+            (source, satisfaction, strictness, strictness_note, convenience, missing_note,
+             history_id, user_id),
+        ).fetchone()
+        conn.commit()
+        return row is not None
 
 
 # ── CLI: инициализация схемы и самотест ──
@@ -605,8 +776,32 @@ def _selftest() -> None:
     assert subscription_left(get_user_by_id(uid)) == SUBSCRIPTION_MONTHLY_QUOTA, "refund вернул норму"
     print(f"подписка: норма {SUBSCRIPTION_MONTHLY_QUOTA}/мес — списание/возврат OK")
 
+    # история покупок: pending → оплата (succeeded) → повтор уведомления не дублирует
+    test_pid = "selftest-payment-0001"
+    create_purchase(test_pid, uid, title="5 проверок", amount=199, source="bot",
+                    kind="package", offer_id="p5")
+    assert get_purchase(uid, test_pid)["status"] == "pending", "новая покупка — pending"
+    assert get_purchases(uid) == [], "неоплаченная покупка не видна в истории"
+    assert grant_payment(test_pid, uid, 199, checks=5, title="5 проверок") is True
+    assert grant_payment(test_pid, uid, 199, checks=5, title="5 проверок") is False, "повтор не начисляет"
+    bought = get_purchases(uid)
+    assert len(bought) == 1 and bought[0]["title"] == "5 проверок", "в истории одна покупка"
+    assert get_user_by_id(uid)["paid_checks"] == 9, "начислено ровно 5"
+    print("история покупок: pending → succeeded, повтор не дублирует — OK")
+
+    # отзыв о проверке: сохраняется, повтор обновляет, чужая проверка — False
+    check_id = get_history(uid)[0]["id"]
+    assert save_feedback(uid, check_id, satisfaction=4, convenience=5, strictness="too_strict")
+    assert save_feedback(uid, check_id, satisfaction=5, convenience=5)
+    assert not save_feedback(uid + 1_000_000, check_id, satisfaction=1, convenience=1), "чужая — нельзя"
+    with _conn() as conn:
+        fb = conn.execute("SELECT satisfaction FROM feedback WHERE history_id = %s", (check_id,)).fetchall()
+    assert [r["satisfaction"] for r in fb] == [5], "одна анкета на проверку, обновлена"
+    print("отзывы: сохранение, обновление, защита от чужих — OK")
+
     # чистим тестовые данные и возвращаем счётчик как было
     with _conn() as conn:
+        conn.execute("DELETE FROM processed_payments WHERE payment_id = %s", (test_pid,))
         conn.execute("DELETE FROM users WHERE telegram_id = %s", (test_tg,))
         conn.execute(
             "UPDATE counters SET value = GREATEST(0, value - 1) WHERE name = 'total_checks'"

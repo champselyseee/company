@@ -86,6 +86,23 @@ def history_item(row: dict) -> dict:
     }
 
 
+# ── История покупок ──
+
+def purchase_item(row: dict) -> dict:
+    """Строка purchases -> Purchase фронта (id, title, kind, amount, source, paidAt)."""
+    amount = row.get("amount")
+    if amount is not None:
+        amount = int(amount) if amount == int(amount) else float(amount)  # рубли: 199, не "199.00"
+    return {
+        "id": row["id"],
+        "title": row["title"],
+        "kind": row.get("kind"),      # 'package' | 'plan' | None (старый платёж)
+        "amount": amount,
+        "source": row.get("source"),  # 'site' | 'bot' | None (старый платёж)
+        "paidAt": _iso(row.get("paid_at") or row.get("created_at")),
+    }
+
+
 # ── Статистика профиля и достижения ──
 
 def _percent(score: int, max_score: int) -> float | None:

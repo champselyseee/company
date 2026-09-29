@@ -62,6 +62,10 @@ export interface CheckResponse {
   result: StructuredResult
   /** Остаток проверок после списания. */
   balance: number
+  /** Номер проверки в истории (к нему привязывается анкета отзыва). null — не записалась. */
+  checkId?: number | null
+  /** Показать анкету отзыва (решает сервер: 1-я и каждая 5-я проверка на сайте). */
+  askFeedback?: boolean
 }
 
 export interface RecognizeResponse {
@@ -106,6 +110,54 @@ export interface CreatePaymentResponse {
   /** Куда отправить пользователя для оплаты. Нет — оплата уже прошла. */
   confirmationUrl?: string
   status: 'pending' | 'paid'
+  /** id платежа — по нему фронт спрашивает статус после возврата с оплаты. */
+  paymentId?: string
+  /** Новый баланс (только когда оплата прошла сразу — режим-заглушка). */
+  balance?: number
+  /** Что куплено, напр. «5 проверок» (только когда оплата прошла сразу). */
+  title?: string
+}
+
+// Статус платежа: pending — ждём кассу, succeeded — оплачено и начислено, canceled — отменён.
+export type PaymentStatus = 'pending' | 'succeeded' | 'canceled'
+
+export interface PaymentStatusResponse {
+  status: PaymentStatus
+  /** Что куплено, напр. «5 проверок» или «подписка «Месяц» (30 проверок в месяц)». */
+  title: string
+  /** Баланс пользователя сейчас. */
+  balance: number
+}
+
+/* Оплаченная покупка для истории в профиле. */
+export interface Purchase {
+  id: number
+  title: string
+  /** Пакет проверок или подписка. null — старая покупка, неизвестно. */
+  kind: 'package' | 'plan' | null
+  /** Сумма в рублях (null — неизвестна). */
+  amount: number | null
+  /** Где куплено: на сайте или в боте. null — старая покупка, неизвестно. */
+  source: 'site' | 'bot' | null
+  /** Когда оплачено (ISO-строка). */
+  paidAt: string | null
+}
+
+/* ── Отзыв о проверке ── */
+
+export type Strictness = 'too_strict' | 'just_right' | 'too_lenient'
+
+export interface FeedbackRequest {
+  checkId: number
+  /** Удовлетворённость проверкой, 1–5. */
+  satisfaction: number
+  /** Удобство формата проверки, 1–5. */
+  convenience: number
+  strictness?: Strictness
+  /** Где модель была слишком строга/простительна. */
+  strictnessNote?: string
+  /** Чего не хватает. */
+  missing?: string
 }
 
 /* ── Публичный счётчик ── */

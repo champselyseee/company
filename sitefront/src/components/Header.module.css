@@ -224,6 +224,51 @@
   transform: translate(3px, 3px);
   box-shadow: 0 0 0 var(--yellow);
 }
+/* Чип баланса в десктоп-навигации — ниже мобильного, в рост пунктов меню. */
+.chipBalanceNav {
+  height: 40px;
+  padding: 0 10px;
+  font-size: 14px;
+}
+/* У вошедшего в навигации есть ещё и чип баланса — чуть сжимаем пункты, чтобы
+   подписи («База аргументов», «Telegram-бот») не переносились на две строки. */
+.navCompact .navItem {
+  gap: 6px;
+  padding-left: 10px;
+  padding-right: 10px;
+}
+/* Обёртка чипа: её «подбрасывает» анимация зачисления, над ней всплывает «+N». */
+.chipWrap {
+  position: relative;
+  display: inline-flex;
+}
+.nav .chipWrap {
+  margin-left: 0;
+}
+/* Во время зачисления чип «зеленеет»: тень и молния. */
+.chipCredited {
+  box-shadow: 3px 3px 0 var(--green);
+}
+.chipCredited svg {
+  color: var(--green-deep);
+}
+/* «+N» на правом верхнем углу чипа (не выше — иначе обрежется краем экрана). */
+.creditFloat {
+  position: absolute;
+  top: -6px;
+  right: -12px;
+  padding: 1px 6px;
+  background: var(--green);
+  color: var(--on-accent);
+  border: 2px solid var(--ink);
+  border-radius: 999px;
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 11px;
+  line-height: 1.2;
+  white-space: nowrap;
+  pointer-events: none;
+}
 .chipBurger {
   display: inline-flex;
   align-items: center;

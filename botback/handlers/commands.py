@@ -125,10 +125,11 @@ async def buy_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     user = update.effective_user
     row = await asyncio.to_thread(db.get_or_create_telegram_user, user.id, user.username or None)
     try:
-        url = await yookassa.create_payment(
+        payment = await yookassa.create_payment(
             row["id"], kind, offer_id,
             return_url=f"https://t.me/{context.bot.username}", source="bot",
         )
+        url = payment["url"]
     except yookassa.YooKassaError as e:
         log.warning("Не удалось создать платёж (tg=%s, %s:%s): %s", user.id, kind, offer_id, e)
         await query.message.reply_text(

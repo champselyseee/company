@@ -8,19 +8,23 @@ import {
 import { IconArrowRight, IconCheck, IconStar, IconTelegram } from '../../lib/icons'
 import type { Page } from '../../lib/nav'
 import type { ToastKind } from '../ui/Toast'
-import { api, errorMessage } from '../../lib/api'
+import { api, errorMessage, type CreatePaymentResponse } from '../../lib/api'
+import { savePendingPayment } from '../../lib/pendingPayment'
 import styles from './CheckoutPage.module.css'
 
 export function CheckoutPage({
   offer,
+  balance,
   onToast,
   onNavigate,
   onPaid,
 }: {
   offer: PurchaseOffer | null
+  /** Текущий баланс — запоминаем, чтобы после оплаты докрутить число от него. */
+  balance: number
   onToast: (text: string, kind?: ToastKind) => void
   onNavigate: (p: Page) => void
-  onPaid: () => void
+  onPaid: (res: CreatePaymentResponse) => void
 }) {
   const [methodId, setMethodId] = useState<PaymentMethodId>(PAYMENT_METHODS[0].id)
   const [promo, setPromo] = useState('')
@@ -49,8 +53,9 @@ export function CheckoutPage({
 
   const method = PAYMENT_METHODS.find((m) => m.id === methodId) ?? PAYMENT_METHODS[0]
 
-  // Создаём платёж на сервере. Если провайдер вернул ссылку — уводим туда;
-  // иначе (оплата уже прошла) сообщаем наверх, чтобы обновить баланс.
+  // Создаём платёж на сервере. Если провайдер вернул ссылку — запоминаем платёж
+  // (после возврата покажем плашку и дождёмся зачисления) и уводим на оплату;
+  // иначе (оплата уже прошла) сообщаем наверх, чтобы показать зачисление.
   async function pay() {
     if (!offer) return
     setPaying(true)
@@ -62,10 +67,18 @@ export function CheckoutPage({
         promo: promo.trim() || undefined,
       })
       if (res.confirmationUrl) {
+        if (res.paymentId) {
+          savePendingPayment({
+            paymentId: res.paymentId,
+            title: offer.title,
+            balanceBefore: balance,
+            startedAt: Date.now(),
+          })
+        }
         window.location.href = res.confirmationUrl
         return
       }
-      onPaid()
+      onPaid(res)
     } catch (e) {
       onToast(errorMessage(e), 'error')
     } finally {

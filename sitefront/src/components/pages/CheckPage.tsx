@@ -1,10 +1,11 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { CSSProperties } from 'react'
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
 import { Button } from '../ui/Button'
 import { useCountUp } from '../../lib/useCountUp'
 import { WORK_TYPES, WORK_TYPE_ORDER, type WorkType } from '../../lib/workTypes'
 import { ResultView } from '../result/ResultView'
+import { FeedbackModal } from '../FeedbackModal'
 import type { StructuredResult } from '../../lib/result'
 import { api, ApiError, errorMessage } from '../../lib/api'
 import type { Page } from '../../lib/nav'
@@ -102,9 +103,37 @@ export function CheckPage({
   const [resultType, setResultType] = useState<WorkType | null>(null)
   // Какой пример разбора показан (null — блок примера ещё скрыт).
   const [exampleType, setExampleType] = useState<WorkType | null>(null)
+  // Анкета отзыва: по какой проверке спросить (сервер сказал askFeedback) и открыто ли окно.
+  const [feedbackFor, setFeedbackFor] = useState<number | null>(null)
+  const [feedbackOpen, setFeedbackOpen] = useState(false)
   const checkerRef = useRef<HTMLDivElement>(null)
   const exampleRef = useRef<HTMLDivElement>(null)
   const resultRef = useRef<HTMLDivElement>(null)
+  // Невидимая метка под разбором: дочитал до неё → через 2 с показываем анкету.
+  const resultEndRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (feedbackFor === null || feedbackOpen) return
+    const end = resultEndRef.current
+    if (!end) return
+    let timer = 0
+    const io = new IntersectionObserver((entries) => {
+      if (entries.some((e) => e.isIntersecting) && !timer) {
+        timer = window.setTimeout(() => setFeedbackOpen(true), 2000)
+      }
+    })
+    io.observe(end)
+    return () => {
+      io.disconnect()
+      window.clearTimeout(timer)
+    }
+  }, [feedbackFor, feedbackOpen])
+
+  // Закрыли или отправили анкету — по этой проверке больше не спрашиваем.
+  const closeFeedback = useCallback(() => {
+    setFeedbackOpen(false)
+    setFeedbackFor(null)
+  }, [])
 
   function scrollToChecker() {
     checkerRef.current?.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'start' })
@@ -151,6 +180,8 @@ export function CheckPage({
       return
     }
     setChecking(true)
+    setFeedbackFor(null) // новая проверка — прежнюю анкету не показываем
+    setFeedbackOpen(false)
     try {
       const res = await api.checks.checkWork({
         workType: selected,
@@ -160,6 +191,7 @@ export function CheckPage({
       setResult(res.result)
       setResultType(selected)
       onBalanceChange(res.balance)
+      if (res.askFeedback && typeof res.checkId === 'number') setFeedbackFor(res.checkId)
       window.setTimeout(() => {
         resultRef.current?.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'start' })
       }, 60)
@@ -407,8 +439,15 @@ export function CheckPage({
           <AnimatePresence mode="wait">
             <ResultView key="live-result" type={resultType} result={result} />
           </AnimatePresence>
+          <div ref={resultEndRef} aria-hidden="true" />
         </section>
       )}
+
+      <FeedbackModal
+        checkId={feedbackOpen ? feedbackFor : null}
+        onClose={closeFeedback}
+        onToast={onToast}
+      />
 
       {/* ── Пример разбора (появляется по кнопке «Посмотреть пример») ── */}
       {exampleType && (

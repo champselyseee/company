@@ -11,8 +11,9 @@ import * as checks from './checks'
 import * as profile from './profile'
 import * as billing from './billing'
 import * as stats from './stats'
+import * as feedback from './feedback'
 
-export const api = { auth, checks, profile, billing, stats }
+export const api = { auth, checks, profile, billing, stats, feedback }
 
 export { ApiError, apiConfigured, apiUrl, errorMessage } from './client'
 export type * from './types'

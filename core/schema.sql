@@ -101,6 +101,49 @@ CREATE TABLE IF NOT EXISTS processed_payments (
 
 ;
 
+-- История покупок (и бот, и сайт) — то, что видит покупатель в профиле.
+-- Строка появляется при создании платежа (pending) и становится succeeded в той же
+-- транзакции, что и начисление (core/db.grant_payment). Защита от двойного начисления
+-- по-прежнему в processed_payments.
+CREATE TABLE IF NOT EXISTS purchases (
+    id         BIGSERIAL PRIMARY KEY,
+    payment_id TEXT NOT NULL UNIQUE,              -- id платежа ЮKassa (или stub-…)
+    user_id    BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    source     TEXT,                              -- 'site' | 'bot' (NULL — старый платёж, неизвестно)
+    provider   TEXT NOT NULL DEFAULT 'yookassa',  -- 'yookassa' | 'stars' | 'stub'
+    kind       TEXT,                              -- 'package' | 'plan' (NULL — старый платёж)
+    offer_id   TEXT,                              -- id тарифа из core/catalog.py
+    title      TEXT NOT NULL,                     -- «5 проверок», «подписка «Месяц» (…)»
+    amount     NUMERIC,
+    status     TEXT NOT NULL DEFAULT 'pending',   -- 'pending' | 'succeeded' | 'canceled'
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    paid_at    TIMESTAMPTZ
+)
+
+;
+
+CREATE INDEX IF NOT EXISTS purchases_user_created_idx ON purchases (user_id, created_at DESC)
+
+;
+
+-- Отзывы о проверке (всплывающая анкета на сайте). Одна анкета на проверку (history_id),
+-- повторная отправка обновляет её.
+CREATE TABLE IF NOT EXISTS feedback (
+    id              BIGSERIAL PRIMARY KEY,
+    user_id         BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    history_id      BIGINT UNIQUE REFERENCES history(id) ON DELETE SET NULL, -- к какой проверке
+    source          TEXT NOT NULL DEFAULT 'site',
+    work_type       TEXT,
+    satisfaction    SMALLINT NOT NULL CHECK (satisfaction BETWEEN 1 AND 5),  -- удовлетворённость проверкой
+    strictness      TEXT CHECK (strictness IN ('too_strict', 'just_right', 'too_lenient')),
+    strictness_note TEXT,                                                    -- где слишком строго/мягко
+    convenience     SMALLINT NOT NULL CHECK (convenience BETWEEN 1 AND 5),   -- удобство формата
+    missing_note    TEXT,                                                    -- чего не хватает
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+)
+
+;
+
 -- Публичные счётчики для главной страницы сайта (напр. общее число проверок).
 CREATE TABLE IF NOT EXISTS counters (
     name  TEXT PRIMARY KEY,

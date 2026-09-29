@@ -21,7 +21,13 @@ import {
 import type { ToastKind } from '../ui/Toast'
 import type { Page } from '../../lib/nav'
 import { pluralChecks } from '../../lib/billing'
-import { api, type HistoryItem, type ProfileStats, type User } from '../../lib/api'
+import {
+  api,
+  type HistoryItem,
+  type ProfileStats,
+  type Purchase,
+  type User,
+} from '../../lib/api'
 import styles from './ProfilePage.module.css'
 
 const STAT_ICONS = { target: IconTarget, bolt: IconBolt, flame: IconFlame, star: IconStar }
@@ -58,6 +64,13 @@ function formatJoined(iso: string | null): string {
   return `с ${d.toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' })}`
 }
 
+// «подписка «Месяц» (…)» → «Подписка «Месяц» (…)»
+function capitalize(s: string): string {
+  return s ? s[0].toUpperCase() + s.slice(1) : s
+}
+
+const SOURCE_LABEL = { site: 'сайт', bot: 'бот' } as const
+
 function initialsOf(user: User | null): string {
   const source = user?.displayName || user?.email || ''
   const letters = source
@@ -77,6 +90,7 @@ export function ProfilePage({
   onLogout,
   balance,
   planName,
+  purchasesVersion = 0,
 }: {
   user: User | null
   onToast: (text: string, kind?: ToastKind) => void
@@ -84,12 +98,15 @@ export function ProfilePage({
   onLogout: () => void
   balance: number
   planName: string
+  /** Меняется после зачисления оплаты — перезагружаем историю покупок. */
+  purchasesVersion?: number
 }) {
   const reduce = useReducedMotion()
   const [stats, setStats] = useState<ProfileStats | null>(null)
   const [unlocked, setUnlocked] = useState<string[]>([])
   // null — ещё грузим/неизвестно; [] — точно пусто (показываем пустое состояние).
   const [history, setHistory] = useState<HistoryItem[] | null>(null)
+  const [purchases, setPurchases] = useState<Purchase[] | null>(null)
 
   // Подтягиваем статистику и историю с сервера. Пока бэка нет — тихо остаёмся
   // на нулях и пустом списке (пользователь не видит ошибок).
@@ -111,6 +128,18 @@ export function ProfilePage({
       alive = false
     }
   }, [])
+
+  // История покупок: при открытии профиля и после каждого зачисления оплаты.
+  useEffect(() => {
+    let alive = true
+    api.billing
+      .getPurchases()
+      .then((list) => alive && setPurchases(list))
+      .catch(() => alive && setPurchases([]))
+    return () => {
+      alive = false
+    }
+  }, [purchasesVersion])
 
   const name = user?.displayName || 'Профиль'
   const joined = formatJoined(user?.joinedAt ?? null)
@@ -251,6 +280,40 @@ export function ProfilePage({
           </div>
         </div>
       </div>
+
+      {/* История покупок — и с сайта, и из Telegram-бота */}
+      <SectionLabel hint="оплаты" style={{ marginTop: 32 }}>
+        История покупок
+      </SectionLabel>
+      {purchases && purchases.length === 0 ? (
+        <p className={styles.emptyHint}>
+          Покупок пока нет. Пополнить баланс можно на{' '}
+          <button className={styles.inlineLink} onClick={() => onNavigate('pricing')}>
+            странице тарифов
+          </button>
+          .
+        </p>
+      ) : (
+        <div className={styles.purchaseList}>
+          {(purchases ?? []).map((p) => (
+            <div key={p.id} className={styles.purchase}>
+              <span className={styles.recentIcon}>
+                {p.kind === 'plan' ? <IconStar size={18} /> : <IconBolt size={18} />}
+              </span>
+              <span className={styles.recentBody}>
+                <span className={styles.recentTitle}>{capitalize(p.title)}</span>
+                <span className={styles.recentDate}>
+                  {p.paidAt ? formatDate(p.paidAt) : ''}
+                  {p.source && <span className={styles.sourceTag}>{SOURCE_LABEL[p.source]}</span>}
+                </span>
+              </span>
+              {p.amount != null && (
+                <span className={styles.purchaseAmount}>{p.amount.toLocaleString('ru-RU')} ₽</span>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Выход — намеренно отделён от остального */}
       <div className={styles.dangerZone}>

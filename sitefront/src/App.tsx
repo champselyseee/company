@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { CSSProperties } from 'react'
 import { AnimatePresence, MotionConfig, motion, useReducedMotion } from 'motion/react'
-import { Header } from './components/Header'
+import { Header, type CreditPulse } from './components/Header'
+import { PaymentBanner } from './components/PaymentBanner'
 import { CheckPage } from './components/pages/CheckPage'
 import { KnowledgePage } from './components/pages/KnowledgePage'
 import { CounterPage } from './components/pages/CounterPage'
@@ -13,7 +14,8 @@ import { ProjectsPage } from './components/pages/ProjectsPage'
 import { ToastHost, type ToastItem, type ToastKind } from './components/ui/Toast'
 import type { Page } from './lib/nav'
 import { FREE_PLAN, type PurchaseOffer } from './lib/billing'
-import { api, type User } from './lib/api'
+import { api, type CreatePaymentResponse, type User } from './lib/api'
+import { usePaymentWatcher } from './lib/usePaymentWatcher'
 
 export function App() {
   const [page, setPage] = useState<Page>('check')
@@ -27,6 +29,11 @@ export function App() {
   // С какой вкладки открыть страницу авторизации: «Вход» или «Регистрация».
   // Меняется, когда гость жмёт кнопку из блока-приглашения на главной.
   const [authMode, setAuthMode] = useState<'login' | 'register'>('login')
+  // Зачисление после оплаты, которое сейчас анимируется на чипе баланса в шапке.
+  const [credit, setCredit] = useState<CreditPulse | null>(null)
+  const creditId = useRef(0)
+  // Меняется после зачисления — профиль перезагружает историю покупок.
+  const [purchasesVersion, setPurchasesVersion] = useState(0)
   const reduce = useReducedMotion()
   const mainRef = useRef<HTMLElement>(null)
   const firstRender = useRef(true)
@@ -39,11 +46,11 @@ export function App() {
     setToasts((list) => list.filter((t) => t.id !== id))
   }, [])
 
-  const notify = useCallback((text: string, kind: ToastKind = 'info') => {
+  const notify = useCallback((text: string, kind: ToastKind = 'info', durationMs = 3500) => {
     toastId.current += 1
     const id = toastId.current
     setToasts((list) => [...list.slice(-2), { id, text, kind }])
-    window.setTimeout(() => dismiss(id), 3500)
+    window.setTimeout(() => dismiss(id), durationMs)
   }, [dismiss])
 
   // Подтянуть пользователя с сервера. Тихо (без тоста): если не залогинен или
@@ -60,6 +67,25 @@ export function App() {
   useEffect(() => {
     void refreshUser()
   }, [refreshUser])
+
+  // Проверки зачислены: баланс в шапке докручивается from → to, чип подпрыгивает,
+  // внизу — уведомление. Потом подтягиваем пользователя целиком (мог смениться тариф).
+  const showCredit = useCallback(
+    (from: number, to: number, title: string) => {
+      creditId.current += 1
+      const id = creditId.current
+      setUser((u) => (u ? { ...u, balance: to } : u))
+      setCredit({ id, from, to })
+      setPurchasesVersion((v) => v + 1)
+      notify(title ? `Оплата прошла: ${title}` : 'Оплата прошла — проверки зачислены', 'success', 6000)
+      window.setTimeout(() => setCredit((c) => (c?.id === id ? null : c)), 2600)
+      void refreshUser()
+    },
+    [notify, refreshUser],
+  )
+
+  // Вернулись со страницы оплаты — ждём зачисления (плашка + опрос статуса).
+  const payment = usePaymentWatcher(isAuthed, (c) => showCredit(c.from, c.to, c.title))
 
   // Вход/регистрация выполнены — сохраняем пользователя и ведём в профиль.
   const handleAuth = useCallback((u: User) => {
@@ -79,13 +105,21 @@ export function App() {
     setPage('auth')
   }, [])
 
-  // Оплата подтверждена сервером без внешнего редиректа — обновляем баланс из профиля.
-  const handlePaid = useCallback(async () => {
-    setSelectedOffer(null)
-    await refreshUser()
-    notify('Оплата прошла — проверки начислены', 'success')
-    setPage('profile')
-  }, [refreshUser, notify])
+  // Оплата подтверждена сервером сразу, без внешнего редиректа (режим-заглушка) —
+  // та же анимация зачисления, что и после ЮKassa.
+  const handlePaid = useCallback(
+    async (res: CreatePaymentResponse) => {
+      setSelectedOffer(null)
+      setPage('profile')
+      if (typeof res.balance === 'number') {
+        showCredit(balance, res.balance, res.title ?? '')
+      } else {
+        await refreshUser()
+        notify('Оплата прошла — проверки начислены', 'success')
+      }
+    },
+    [balance, showCredit, refreshUser, notify],
+  )
 
   // Проверка списала баланс — отражаем новый остаток у авторизованного пользователя.
   const handleBalanceChange = useCallback((next: number) => {
@@ -116,6 +150,7 @@ export function App() {
         return (
           <CheckoutPage
             offer={selectedOffer}
+            balance={balance}
             onToast={notify}
             onNavigate={setPage}
             onPaid={handlePaid}
@@ -134,6 +169,7 @@ export function App() {
             onLogout={() => setUser(null)}
             balance={balance}
             planName={planName}
+            purchasesVersion={purchasesVersion}
           />
         )
       case 'auth':
@@ -167,7 +203,22 @@ export function App() {
       <a className="skip-link" href="#main">
         К содержимому
       </a>
-      <Header current={page} onNavigate={setPage} isAuthed={isAuthed} balance={balance} />
+      <Header
+        current={page}
+        onNavigate={setPage}
+        isAuthed={isAuthed}
+        balance={balance}
+        credit={credit}
+      />
+
+      <PaymentBanner
+        phase={payment.phase}
+        onDismiss={payment.dismiss}
+        onPricing={() => {
+          payment.dismiss()
+          setPage('pricing')
+        }}
+      />
 
       <main id="main" ref={mainRef} tabIndex={-1} style={{ outline: 'none' }}>
         <AnimatePresence mode="wait" initial={false}>

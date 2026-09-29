@@ -16,11 +16,15 @@ FastAPI-сервер для веб-версии. Отдаёт API, которо�
 | POST | `/api/auth/forgot` | запрос восстановления пароля (пока без письма) |
 | GET  | `/api/auth/google/start` · `/callback` | вход через Google |
 | GET  | `/api/auth/telegram/start` · `/callback` | вход через Telegram (Login Widget) |
-| POST | `/api/checks` | проверить работу → `{result, balance}` |
+| POST | `/api/checks` | проверить работу → `{result, balance, checkId, askFeedback}` |
+| POST | `/api/feedback` | анкета отзыва о проверке `checkId` (звёзды 1–5, строгость, тексты) |
 | POST | `/api/ocr` | фото (multipart `image`) → распознанный текст |
 | GET  | `/api/history?limit=` | последние проверки пользователя |
 | GET  | `/api/profile` | статистика профиля и достижения |
-| POST | `/api/payments` | создать платёж (пока режим-заглушка) |
+| POST | `/api/payments` | создать платёж ЮKassa → `{confirmationUrl, paymentId}` |
+| GET  | `/api/payments/{paymentId}` | статус платежа (пока pending — сам спрашивает ЮKassa и начисляет) |
+| GET  | `/api/purchases?limit=` | история оплаченных покупок (сайт и бот) |
+| POST | `/api/payments/yookassa/webhook` | уведомление ЮKassa (без входа) |
 | GET  | `/api/public/total-checks` | публичный счётчик (без входа) |
 
 ## Как это работает

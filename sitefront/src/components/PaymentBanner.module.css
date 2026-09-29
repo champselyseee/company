@@ -1,0 +1,94 @@
+/* Плашка «платёж обрабатывается»: плоский блок в стиле сайта — бумажный фон,
+   чернильная рамка и сдвинутая тень; цвет тени и значка — по состоянию. */
+.banner {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-top: 18px;
+  padding: 14px 16px;
+  background: var(--paper-card);
+  border: var(--border-w) solid var(--ink);
+  border-radius: var(--r-md);
+  box-shadow: 4px 4px 0 var(--yellow);
+}
+.slow {
+  box-shadow: 4px 4px 0 var(--indigo);
+}
+.canceled {
+  box-shadow: 4px 4px 0 var(--coral);
+}
+
+.icon {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border: 2px solid var(--ink);
+  border-radius: 11px;
+  background: var(--yellow);
+  color: var(--ink);
+}
+.slow .icon {
+  background: var(--indigo);
+  color: var(--on-accent);
+}
+.canceled .icon {
+  background: var(--coral);
+  color: var(--on-accent);
+}
+
+/* Крутилка ожидания: кольцо с «вырезанной» четвертью. */
+.spinner {
+  width: 18px;
+  height: 18px;
+  border: 2.5px solid var(--ink);
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: spin 0.9s linear infinite;
+}
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.title {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 15px;
+  color: var(--ink);
+}
+.text {
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.4;
+  color: var(--ink-soft);
+}
+
+.actions {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+@media (max-width: 640px) {
+  .banner {
+    flex-wrap: wrap;
+    align-items: flex-start;
+    margin-top: 10px;
+  }
+  .actions {
+    width: 100%;
+    justify-content: flex-end;
+  }
+}

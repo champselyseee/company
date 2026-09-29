@@ -1,11 +1,13 @@
 """Оплата через ЮKassa — общий модуль для бота и сайта.
 
-  • create_payment — создаёт платёж по тарифу из core/catalog.py (сумму решает сервер)
-    и возвращает ссылку на страницу оплаты;
+  • create_payment — создаёт платёж по тарифу из core/catalog.py (сумму решает сервер),
+    записывает его в историю покупок (pending) и возвращает id платежа и ссылку на оплату;
   • handle_notification — обработка HTTP-уведомления ЮKassa. Телу уведомления НЕ верим:
     берём из него только id и переспрашиваем платёж в API ЮKassa. Начисляем, только если
     там status=succeeded, paid=true и сумма совпадает с тарифом — ровно один раз
-    (db.grant_payment, защита от повторных уведомлений).
+    (db.grant_payment, защита от повторных уведомлений);
+  • sync_payment — то же самое, но по запросу сайта, пока покупатель ждёт на странице:
+    не дожидаемся уведомления, а сами спрашиваем ЮKassa (кто первый — тот и начисляет).
 
 Ключи магазина из переменных окружения своей службы: YUKASSA_SHOP_ID, YUKASSA_SECRET.
 У бота и сайта могут быть РАЗНЫЕ магазины — поэтому у каждой службы свой вебхук
@@ -78,8 +80,12 @@ async def _request(method: str, path: str, *, json: dict | None = None, headers:
     return resp.json()
 
 
-async def create_payment(user_id: int, kind: str, offer_id: str, return_url: str, source: str) -> str:
-    """Создаёт платёж для users.id по тарифу и возвращает confirmation_url (страница оплаты)."""
+async def create_payment(user_id: int, kind: str, offer_id: str, return_url: str, source: str) -> dict:
+    """Создаёт платёж для users.id по тарифу. Возвращает {"id": id платежа, "url": страница оплаты}.
+
+    Платёж сразу пишется в историю покупок со статусом pending (сбой записи — только лог:
+    при оплате grant_payment всё равно создаст строку).
+    """
     offer = catalog.get_offer(kind, offer_id)
     if offer is None:
         raise YooKassaError("Неизвестный тариф")
@@ -94,9 +100,17 @@ async def create_payment(user_id: int, kind: str, offer_id: str, return_url: str
     url = (data.get("confirmation") or {}).get("confirmation_url")
     if not url:
         raise YooKassaError("ЮKassa не вернула ссылку на оплату")
+    payment_id = str(data.get("id") or "")
     log.info("ЮKassa: создан платёж %s (uid=%s, %s:%s, %s ₽, %s)",
-             data.get("id"), user_id, kind, offer_id, offer["price"], source)
-    return url
+             payment_id, user_id, kind, offer_id, offer["price"], source)
+    try:
+        await asyncio.to_thread(
+            db.create_purchase, payment_id, user_id, title=offer["title"], amount=offer["price"],
+            source=source, provider="yookassa", kind=kind, offer_id=offer_id,
+        )
+    except Exception:
+        log.exception("Не удалось записать платёж %s в историю покупок", payment_id)
+    return {"id": payment_id, "url": url}
 
 
 async def fetch_payment(payment_id: str) -> dict:
@@ -127,6 +141,7 @@ def _grant_sync(payment_id: str, meta: dict, amount: dict) -> dict | None:
             log.warning("ЮKassa: платёж %s для несуществующего пользователя %s", payment_id, uid)
             return None
         checks, days, quota, title = offer["checks"], offer["days"], offer["quota"], offer["title"]
+        kind, offer_id, source = offer["kind"], offer["id"], meta.get("source")
     elif "user_id" in meta:  # старый формат прежнего бота
         try:
             tg_id = int(meta["user_id"])
@@ -137,11 +152,13 @@ def _grant_sync(payment_id: str, meta: dict, amount: dict) -> dict | None:
         user = db.get_or_create_telegram_user(tg_id)
         uid = user["id"]
         checks, days, quota, title = legacy["checks"], legacy["days"], None, legacy["title"]
+        kind, offer_id, source = None, None, "bot"
     else:
         log.warning("ЮKassa: платёж %s без metadata покупателя — не начисляем", payment_id)
         return None
 
-    if not db.grant_payment(payment_id, uid, value, checks=checks, days=days, quota=quota):
+    if not db.grant_payment(payment_id, uid, value, checks=checks, days=days, quota=quota,
+                            title=title, kind=kind, offer_id=offer_id, source=source):
         return None  # это уведомление уже обработано раньше
     referrer_id = db.reward_referrer(uid)  # идемпотентно (флаг rewarded)
     log.info("ЮKassa: платёж %s — пользователю %s начислено: %s", payment_id, uid, title)
@@ -165,6 +182,29 @@ async def handle_notification(body) -> dict | None:
         log.warning("ЮKassa: уведомление об оплате %s, но в API статус %s — не начисляем",
                     payment_id, payment.get("status"))
         return None
+    return await _grant_paid(payment_id, payment)
+
+
+async def _grant_paid(payment_id: str, payment: dict) -> dict | None:
+    """Начисление по платежу, который API ЮKassa подтвердил как оплаченный (идемпотентно)."""
     return await asyncio.to_thread(
         _grant_sync, payment_id, payment.get("metadata") or {}, payment.get("amount") or {}
     )
+
+
+async def sync_payment(payment_id: str) -> dict | None:
+    """Спросить ЮKassa о платеже сейчас, не дожидаясь уведомления (сайт, пока покупатель ждёт).
+
+    Оплачен → начисляем так же, как вебхук (ровно один раз — кто первый: вебхук или этот
+    запрос); отменён → помечаем покупку canceled. Возвращает данные о НОВОМ начислении, иначе
+    None. Бросает YooKassaError, если ЮKassa недоступна.
+    """
+    if not _PAYMENT_ID_RE.match(payment_id):
+        return None
+    payment = await fetch_payment(payment_id)
+    status = payment.get("status")
+    if status == "succeeded" and payment.get("paid") is True:
+        return await _grant_paid(payment_id, payment)
+    if status == "canceled":
+        await asyncio.to_thread(db.mark_purchase_canceled, payment_id)
+    return None

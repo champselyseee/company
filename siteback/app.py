@@ -16,6 +16,8 @@ import io
 import logging
 import secrets
 import time
+from datetime import datetime, timedelta, timezone
+from typing import Literal
 
 from fastapi import (
     Depends, FastAPI, File, HTTPException, Query, Request, Response, UploadFile,
@@ -101,6 +103,15 @@ class PaymentBody(BaseModel):
     id: str
     method: str          # 'yookassa' | 'stars'
     promo: str | None = None
+
+
+class FeedbackBody(BaseModel):
+    checkId: int
+    satisfaction: int = Field(ge=1, le=5)      # удовлетворённость проверкой, звёзды
+    convenience: int = Field(ge=1, le=5)       # удобство формата проверки, звёзды
+    strictness: Literal["too_strict", "just_right", "too_lenient"] | None = None
+    strictnessNote: str | None = Field(default=None, max_length=2000)  # где слишком строго/мягко
+    missing: str | None = Field(default=None, max_length=2000)         # чего не хватает
 
 
 # ── Здоровье сервиса ──
@@ -237,6 +248,7 @@ async def create_check(body: CheckBody, user: dict = Depends(current_user)) -> d
             text=body.studentText,
             task_text=body.taskText,  # задание тоже уходит в Claude (раньше доходило только до ответа)
             source="site",
+            record=False,  # в историю пишем сами ниже — нужен id записи для анкеты отзыва
         )
     except ClaudeError as e:
         # ИИ не ответил — возвращаем зарезервированную проверку, чтобы не потерять её зря.
@@ -248,11 +260,53 @@ async def create_check(body: CheckBody, user: dict = Depends(current_user)) -> d
         log.exception("Проверка на сайте не удалась (user_id=%s)", user["id"])
         raise HTTPException(status_code=500, detail="Не удалось проверить работу, проверка возвращена") from e
 
+    # История + публичный счётчик. Сбой базы НЕ теряет готовый (дорогой) разбор — как было
+    # внутри check_work: отдаём его без checkId, анкету тогда не показываем.
+    check_id: int | None = None
+    ask_feedback = False
+    try:
+        check_id = await run_in_threadpool(db.record_check, user["id"], body.workType, answer, "site")
+        n = await run_in_threadpool(db.count_checks, user["id"], "site")
+        ask_feedback = n == 1 or n % FEEDBACK_ASK_EVERY == 0
+    except Exception:
+        log.exception("Не удалось записать проверку в историю (user_id=%s)", user["id"])
+
     fresh = await run_in_threadpool(db.get_user_by_id, user["id"])
     result = serializers.parse_result(answer)
     if body.taskText:
         result["task"] = {"text": body.taskText}
-    return {"result": result, "balance": serializers.compute_balance(fresh)}
+    return {
+        "result": result,
+        "balance": serializers.compute_balance(fresh),
+        "checkId": check_id,
+        "askFeedback": ask_feedback,
+    }
+
+
+# ── Отзыв о проверке (всплывающая анкета) ──
+
+# Анкету показываем после 1-й и дальше каждой 5-й проверки на сайте (решает сервер).
+FEEDBACK_ASK_EVERY = 5
+
+
+def _clean_text(value: str | None) -> str | None:
+    value = (value or "").strip()
+    return value or None
+
+
+@app.post("/api/feedback")
+def send_feedback(body: FeedbackBody, user: dict = Depends(current_user)) -> dict:
+    saved = db.save_feedback(
+        user["id"], body.checkId,
+        satisfaction=body.satisfaction,
+        convenience=body.convenience,
+        strictness=body.strictness,
+        strictness_note=_clean_text(body.strictnessNote),
+        missing_note=_clean_text(body.missing),
+    )
+    if not saved:
+        raise HTTPException(status_code=404, detail="Проверка не найдена")
+    return {"ok": True}
 
 
 def _pdf_text(raw: bytes) -> str:
@@ -320,13 +374,14 @@ async def create_payment(body: PaymentBody, user: dict = Depends(current_user)) 
         if body.method != "yookassa":
             raise HTTPException(status_code=400, detail="Оплата Stars — только в Telegram-боте")
         try:
-            url = await yookassa.create_payment(
+            payment = await yookassa.create_payment(
                 user["id"], body.kind, body.id, return_url=config.FRONT_REDIRECT_URL, source="site"
             )
         except yookassa.YooKassaError as e:
             raise HTTPException(status_code=502, detail=f"Не удалось создать оплату: {e}") from e
-        # Проверки начислит вебхук ЮKassa после оплаты (core/yookassa.handle_notification).
-        return {"confirmationUrl": url, "status": "pending"}
+        # Проверки начислит вебхук ЮKassa (core/yookassa.handle_notification) или опрос
+        # статуса с фронта (GET /api/payments/{id} → yookassa.sync_payment) — кто первый.
+        return {"confirmationUrl": payment["url"], "paymentId": payment["id"], "status": "pending"}
 
     if config.PAYMENTS_MODE != "stub":
         raise HTTPException(status_code=501, detail="Оплата ещё не подключена")
@@ -335,9 +390,58 @@ async def create_payment(body: PaymentBody, user: dict = Depends(current_user)) 
     payment_id = f"stub-{user['id']}-{int(time.time())}-{secrets.token_hex(4)}"
     await run_in_threadpool(
         db.grant_payment, payment_id, user["id"], offer["price"],
-        checks=offer["checks"], days=offer["days"], quota=offer["quota"], provider=body.method,
+        checks=offer["checks"], days=offer["days"], quota=offer["quota"], provider="stub",
+        title=offer["title"], kind=body.kind, offer_id=body.id, source="site",
     )
-    return {"status": "paid"}
+    fresh = await run_in_threadpool(db.get_user_by_id, user["id"])
+    return {
+        "status": "paid",
+        "paymentId": payment_id,
+        "title": offer["title"],
+        "balance": serializers.compute_balance(fresh),
+    }
+
+
+# Старше суток ЮKassa уже не спрашиваем: брошенный платёж так и остаётся pending.
+PAYMENT_SYNC_MAX_AGE = timedelta(days=1)
+
+
+@app.get("/api/payments/{payment_id}")
+async def payment_status(payment_id: str, user: dict = Depends(current_user)) -> dict:
+    """Статус платежа для плашки «платёж обрабатывается» (фронт спрашивает каждые несколько секунд).
+
+    Пока в базе pending — сами спрашиваем ЮKassa (yookassa.sync_payment): оплачен → начисляем
+    тем же кодом, что вебхук (ровно один раз), отменён → canceled. Чужой платёж → 404.
+    """
+    row = await run_in_threadpool(db.get_purchase, user["id"], payment_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="Платёж не найден")
+    if (
+        row["status"] == "pending"
+        and row["provider"] == "yookassa"
+        and config.PAYMENTS_MODE == "yookassa"
+        and datetime.now(timezone.utc) - row["created_at"] < PAYMENT_SYNC_MAX_AGE
+    ):
+        try:
+            await yookassa.sync_payment(payment_id)
+        except yookassa.YooKassaError as e:
+            log.warning("ЮKassa: не удалось проверить платёж %s: %s", payment_id, e)
+        except Exception:
+            log.exception("ЮKassa: сбой проверки платежа %s", payment_id)
+        row = await run_in_threadpool(db.get_purchase, user["id"], payment_id) or row
+    fresh = await run_in_threadpool(db.get_user_by_id, user["id"])
+    return {
+        "status": row["status"],
+        "title": row["title"],
+        "balance": serializers.compute_balance(fresh),
+    }
+
+
+@app.get("/api/purchases")
+def purchases(limit: int = Query(default=50, ge=1, le=100), user: dict = Depends(current_user)) -> list[dict]:
+    """История покупок для профиля: только оплаченные, и с сайта, и из бота."""
+    rows = db.get_purchases(user["id"], limit)
+    return [serializers.purchase_item(r) for r in rows]
 
 
 @app.post("/api/payments/yookassa/webhook")
