@@ -19,7 +19,8 @@ from urllib.parse import parse_qsl
 
 from aiohttp import web
 
-from . import config
+from . import config, notify
+from .handlers import feedback
 
 try:  # как пакет (core.db) или как одиночные модули — как в остальном коде бота
     from core import claude, db, grok, yookassa
@@ -241,6 +242,7 @@ async def handle_check(request):
         answer = await claude.check_work(
             user_id, work_type, text=text, photos=photos,
             file_name=file_name, file_text=file_text, source="bot",
+            record=False,  # в историю пишем сами ниже — нужен id записи для опроса-отзыва
         )
     except claude.ClaudeError as e:
         await asyncio.to_thread(db.refund_check, user_id, kind)  # ИИ не ответил — вернуть
@@ -249,7 +251,27 @@ async def handle_check(request):
         await asyncio.to_thread(db.refund_check, user_id, kind)
         log.exception("Проверка через мини-аппу не удалась (user_id=%s)", user_id)
         return _json({"error": "server_error"}, 500)
+
+    # История + публичный счётчик. Сбой базы НЕ теряет готовый разбор (как было внутри
+    # check_work) — тогда просто без опроса. Опрос — после 1-й и каждой 5-й проверки в боте,
+    # отдельной задачей, чтобы не задерживать ответ мини-аппе.
+    try:
+        history_id = await asyncio.to_thread(db.record_check, user_id, work_type, answer, "bot")
+        n = await asyncio.to_thread(db.count_checks, user_id, "bot")
+        if feedback.should_ask(n) and user.get("telegram_id"):
+            _background(feedback.send_poll(request.app.get(BOT_KEY), user["telegram_id"], history_id))
+    except Exception:
+        log.exception("Не удалось записать проверку в историю (user_id=%s)", user_id)
     return _json({"answer": answer})
+
+
+_tasks: set = set()  # ссылки на фоновые задачи, чтобы их не собрал сборщик мусора
+
+
+def _background(coro) -> None:
+    task = asyncio.create_task(coro)
+    _tasks.add(task)
+    task.add_done_callback(_tasks.discard)
 
 
 async def handle_ocr(request):
@@ -292,40 +314,9 @@ async def handle_yukassa_webhook(request):
         return web.Response(status=500)
     if grant:
         bot = request.app.get(BOT_KEY)
-        await _notify_buyer(bot, grant)
-        await _notify_referrer(bot, grant.get("referrer_id"))
+        await notify.notify_buyer(bot, grant)
+        await notify.notify_referrer(bot, grant.get("referrer_id"))
     return web.Response(status=200)
-
-
-async def _notify_buyer(bot, grant: dict) -> None:
-    """Пишет покупателю в Telegram, что оплата прошла (если у него есть Telegram). Сбой — только лог."""
-    if bot is None or not grant.get("telegram_id"):
-        return
-    try:
-        await bot.send_message(
-            chat_id=grant["telegram_id"],
-            text=f"✅ Оплата прошла: {grant['title']}.\n\nПроверить работу — /start",
-        )
-    except Exception:
-        log.warning("Не удалось уведомить покупателя (users.id=%s)", grant.get("user_id"), exc_info=True)
-
-
-async def _notify_referrer(bot, referrer_id: int | None) -> None:
-    """Пишет пригласившему в Telegram, что ему начислен бонус. Сбой не критичен — только лог."""
-    if bot is None or referrer_id is None:
-        return
-    try:
-        referrer = await asyncio.to_thread(db.get_user_by_id, referrer_id)
-        if referrer and referrer.get("telegram_id"):
-            await bot.send_message(
-                chat_id=referrer["telegram_id"],
-                text=(
-                    "🎉 Друг, которого ты пригласил, купил проверки — "
-                    "тебе начислена 1 проверка в подарок!\n\nПроверить работу — /start"
-                ),
-            )
-    except Exception:
-        log.warning("Не удалось уведомить пригласившего (users.id=%s)", referrer_id, exc_info=True)
 
 
 # ── Сборка и запуск сервера ──

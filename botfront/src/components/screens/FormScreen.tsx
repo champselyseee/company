@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
-import { motion, useReducedMotion } from 'motion/react'
+import { createPortal } from 'react-dom'
+import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
 import type { AttachedFile, WorkType } from '../../lib/types'
 import { WORK_TYPES, WORK_TYPE_ORDER } from '../../lib/workTypes'
 import { Button } from '../ui/Button'
@@ -21,6 +22,8 @@ import {
 import { fetchMe, recognizePhoto } from '../../lib/api'
 import { fileToDataUrl, resizeImageToBase64 } from '../../lib/image'
 import { MAX_FILE_BYTES, MAX_PHOTOS } from '../../lib/config'
+import { loadLastBalance, saveLastBalance } from '../../lib/lastBalance'
+import { notify } from '../../lib/telegram'
 import styles from './FormScreen.module.css'
 
 const WORK_ICONS = { mail: IconMail, pen: IconPen, book: IconBook }
@@ -97,6 +100,8 @@ export function FormScreen({
   // чтобы человек убедился: снимок читаемый.
   const [taskText, setTaskText] = useState('')
   const [checksLeft, setChecksLeft] = useState<number | null>(null)
+  // Баланс вырос с прошлого открытия (оплата/бонус) — показываем зачисление, как на сайте.
+  const [credit, setCredit] = useState<{ from: number; to: number } | null>(null)
   const [totalChecks, setTotalChecks] = useState<number | null>(null)
   const checkerRef = useRef<HTMLElement>(null)
 
@@ -114,6 +119,11 @@ export function FormScreen({
         return
       }
       setChecksLeft(me.checksLeft)
+      if (me.checksLeft !== null) {
+        const prev = loadLastBalance()
+        if (prev !== null && me.checksLeft > prev) setCredit({ from: prev, to: me.checksLeft })
+        saveLastBalance(me.checksLeft)
+      }
     })
     return () => {
       alive = false
@@ -281,12 +291,7 @@ export function FormScreen({
 
       {/* ── Инструмент проверки ── */}
       <section className={styles.checkerSection} ref={checkerRef}>
-        {checksLeft !== null && (
-          <p className={styles.balance}>
-            <IconCheckDoc size={16} />
-            Осталось проверок: <b>{checksLeft}</b>
-          </p>
-        )}
+        {checksLeft !== null && <BalanceLine value={checksLeft} credit={credit} />}
 
         <div className={styles.head}>
           <h2 className={styles.h2}>Проверить работу</h2>
@@ -428,6 +433,124 @@ export function FormScreen({
 }
 
 /** Нумерованный шаг формы — как на сайте (отступ через класс, а не инлайновый стиль). */
+// 1 проверка, 2 проверки, 5 проверок.
+function checksWord(n: number): string {
+  const m10 = n % 10
+  const m100 = n % 100
+  if (m10 === 1 && m100 !== 11) return 'проверка'
+  if (m10 >= 2 && m10 <= 4 && (m100 < 10 || m100 >= 20)) return 'проверки'
+  return 'проверок'
+}
+
+/* «Осталось проверок: N». При зачислении (credit) — как на сайте (чип баланса + уведомление):
+   сразу внизу всплывает «Баланс пополнен: +N проверок» и телефон коротко вибрирует; сама строка,
+   когда до неё долистали, докручивает число от старого к новому, подпрыгивает, зеленеет, «+N»
+   на углу. Строка стоит ниже приветствия — поэтому ждём, пока она окажется на экране. */
+function BalanceLine({ value, credit }: { value: number; credit: { from: number; to: number } | null }) {
+  const ref = useRef<HTMLParagraphElement>(null)
+  // Пока не запустили анимацию — показываем старое число (useCountUp выключен и стоит на нём).
+  const [running, setRunning] = useState(false)
+  const [done, setDone] = useState(false)
+  const [toast, setToast] = useState(false)
+  const shown = useCountUp(credit && !running ? credit.from : value, 1100, running)
+  const delta = credit ? credit.to - credit.from : 0
+
+  // Уведомление — сразу при открытии, где бы человек ни был на странице.
+  useEffect(() => {
+    if (!credit) return
+    setToast(true)
+    notify('success')
+    const hide = window.setTimeout(() => setToast(false), 5000)
+    return () => window.clearTimeout(hide)
+  }, [credit])
+
+  // Анимация строки — когда она на экране. Следить начинаем, когда раскладка устоялась:
+  // пока грузятся шрифты и «въезжает» экран, страница короче и строка ненадолго видна снизу —
+  // анимация отыграла бы впустую.
+  useEffect(() => {
+    if (!credit || running || !ref.current) return
+    const el = ref.current
+    let start = 0
+    let settle = 0
+    let cancelled = false
+    const io = new IntersectionObserver(
+      (entries) => {
+        // isIntersecting срабатывает и от одного пикселя — ждём, пока строку видно на 60%.
+        if (entries.some((e) => e.intersectionRatio >= 0.6) && !start) {
+          start = window.setTimeout(() => setRunning(true), 300)
+        }
+      },
+      // Нижнюю четверть экрана не считаем: там уведомление «Баланс пополнен» — анимация
+      // начнётся, когда строка поднимется выше и её хорошо видно.
+      { threshold: 0.6, rootMargin: '0px 0px -25% 0px' },
+    )
+    document.fonts.ready.then(() => {
+      if (!cancelled) settle = window.setTimeout(() => io.observe(el), 400)
+    })
+    return () => {
+      cancelled = true
+      io.disconnect()
+      window.clearTimeout(start)
+      window.clearTimeout(settle)
+    }
+  }, [credit, running])
+
+  useEffect(() => {
+    if (!running) return
+    const stop = window.setTimeout(() => setDone(true), 2700)
+    return () => window.clearTimeout(stop)
+  }, [running])
+
+  const pulsing = credit !== null && running && !done
+  return (
+    <>
+      {createPortal(
+        <AnimatePresence>
+          {toast && delta > 0 && (
+            <motion.div
+              className={styles.creditToast}
+              role="status"
+              initial={{ opacity: 0, y: 20, scale: 0.9 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 10, scale: 0.95, transition: { duration: 0.18 } }}
+              transition={{ type: 'spring', stiffness: 420, damping: 30 }}
+            >
+              <span className={styles.creditToastIcon}>
+                <IconCheck size={18} />
+              </span>
+              Баланс пополнен: +{delta} {checksWord(delta)}
+            </motion.div>
+          )}
+        </AnimatePresence>,
+        document.body,
+      )}
+      <motion.p
+        ref={ref}
+        className={`${styles.balance} ${pulsing ? styles.balanceCredited : ''}`}
+        animate={pulsing ? { scale: [1, 1.12, 0.97, 1.04, 1], rotate: [0, -2, 1.5, 0, 0] } : { scale: 1, rotate: 0 }}
+        transition={{ duration: 0.9, ease: 'easeOut' }}
+      >
+        <IconCheckDoc size={16} />
+        Осталось проверок: <b>{shown}</b>
+        <AnimatePresence>
+          {pulsing && credit && credit.to > credit.from && (
+            <motion.span
+              className={styles.creditFloat}
+              aria-hidden="true"
+              initial={{ opacity: 0, y: 6, scale: 0.5 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: -4, transition: { duration: 0.35 } }}
+              transition={{ type: 'spring', stiffness: 420, damping: 18 }}
+            >
+              +{credit.to - credit.from}
+            </motion.span>
+          )}
+        </AnimatePresence>
+      </motion.p>
+    </>
+  )
+}
+
 function FormStep({ n, title, sub, spaced }: { n: number; title: string; sub: string; spaced?: boolean }) {
   return (
     <div className={`${styles.formStep} ${spaced ? styles.formStepSpaced : ''}`}>

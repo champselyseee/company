@@ -843,6 +843,66 @@
   font-weight: 800;
   color: var(--indigo);
 }
+/* Зачисление (как чип баланса на сайте): зелёная тень и «+N» на углу. */
+.balance {
+  position: relative;
+}
+.balanceCredited {
+  box-shadow: 4px 4px 0 var(--green);
+}
+.balanceCredited b {
+  color: var(--green-deep);
+}
+/* Уведомление «Баланс пополнен» — как тост на сайте: внизу по центру, поверх страницы. */
+.creditToast {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: calc(18px + env(safe-area-inset-bottom));
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  width: max-content;
+  max-width: min(92vw, 420px);
+  margin: 0 auto;
+  padding: 12px 16px 12px 12px;
+  background: var(--paper-card);
+  border: var(--border-w) solid var(--ink);
+  border-radius: var(--r-md);
+  box-shadow: 4px 4px 0 var(--ink);
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--ink);
+}
+.creditToastIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  flex-shrink: 0;
+  border: 2px solid var(--ink);
+  border-radius: 9px;
+  background: var(--green);
+  color: var(--on-accent);
+}
+.creditFloat {
+  position: absolute;
+  top: -10px;
+  right: -8px;
+  padding: 1px 7px;
+  background: var(--green);
+  color: var(--on-accent);
+  border: 2px solid var(--ink);
+  border-radius: 999px;
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 12px;
+  line-height: 1.25;
+  white-space: nowrap;
+  pointer-events: none;
+}
 
 /* Отступ между шагами формы. На сайте задавался инлайновым style={{marginTop:26}};
    у бота всё живёт в CSS Modules, поэтому вынесено в класс. Значение то же. */

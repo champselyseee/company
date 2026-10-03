@@ -1,4 +1,4 @@
-"""Команды бота: /start, /help, /balance, /history, /ref, /buy (оплата через ЮKassa).
+"""Команды бота: /start, /help, /balance, /history, /purchases, /ref, /buy (оплата через ЮKassa).
 
 Проверка работ — только через мини-аппу (см. botback/webapp.py). На любое обычное
 сообщение в чате отвечаем подсказкой открыть приложение (open_app_hint).
@@ -14,7 +14,8 @@ from telegram.ext import ContextTypes
 
 from .. import config
 from ..formatting import WORK_TYPE_NAMES
-from ..keyboards import BUY_PREFIX, main_keyboard, offers_keyboard, pay_keyboard
+from ..keyboards import BUY_PREFIX, main_keyboard, offers_keyboard, pay_keyboard, with_purchases_keyboard
+from ..reminders import MSK
 
 # Общий код из core/. Пробуем как пакет (core.db) и как одиночные модули (db).
 try:
@@ -74,7 +75,9 @@ async def help_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     text = (
         "✍️ Работы проверяю в приложении (кнопка ниже)\n"
         "/balance — сколько проверок осталось\n"
+        "/buy — купить проверки\n"
         "/history — последние проверки\n"
+        "/purchases — мои покупки\n"
         "/ref — пригласить друга и получить бонус"
     )
     text = _with_site(text, "🌐 Материалы для подготовки: {site}")
@@ -99,7 +102,7 @@ async def balance(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         total = free_left + paid
         suffix = " (в т.ч. 1 бесплатная)" if free_left else ""
         text = f"📊 Проверок доступно: {total}{suffix}\n\nКупить ещё — /buy."
-    await update.message.reply_text(_with_site(text, site_line), reply_markup=main_keyboard())
+    await update.message.reply_text(_with_site(text, site_line), reply_markup=with_purchases_keyboard())
 
 
 async def buy(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -139,7 +142,8 @@ async def buy_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     title = offer["title"][:1].upper() + offer["title"][1:]
     await query.message.reply_text(
         f"💳 {title} — {offer['price']} ₽\n\n"
-        "Нажми кнопку, чтобы оплатить. Проверки начислятся автоматически, я напишу, когда оплата пройдёт.",
+        "Нажми кнопку, чтобы оплатить. После оплаты в течение 3 минут проверки зачислятся "
+        "на баланс — я сразу напишу.",
         reply_markup=pay_keyboard(url, offer["price"]),
     )
 
@@ -170,6 +174,33 @@ async def history_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         lines.append(f"{i}. {name} — {when}\n{preview}".rstrip())
     text = _with_site("\n".join(lines), "🌐 Полные разборы — на сайте {site} (войди через Telegram).")
     await update.message.reply_text(text, reply_markup=main_keyboard())
+
+
+def _rub(amount) -> str:
+    """199 → «199 ₽», 199.50 → «199.50 ₽»."""
+    return f"{amount:.0f} ₽" if amount == int(amount) else f"{amount:.2f} ₽"
+
+
+async def purchases_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """/purchases и кнопка «🧾 Мои покупки» — оплаченные покупки (в боте и на сайте), как в профиле сайта."""
+    if update.callback_query:
+        await update.callback_query.answer()
+    user = update.effective_user
+    row = await asyncio.to_thread(db.get_or_create_telegram_user, user.id, user.username or None)
+    items = await asyncio.to_thread(db.get_purchases, row["id"], 10)
+    if not items:
+        text = "🧾 Покупок пока нет.\n\nКупить проверки — /buy"
+    else:
+        lines = ["🧾 Твои покупки:", ""]
+        for p in items:
+            when = (p["paid_at"] or p["created_at"]).astimezone(MSK).strftime("%d.%m.%Y")
+            title = p["title"][:1].upper() + p["title"][1:]
+            amount = f" — {_rub(p['amount'])}" if p["amount"] is not None else ""
+            where = {"site": " · сайт", "bot": " · бот"}.get(p["source"] or "", "")
+            lines.append(f"• {when} — {title}{amount}{where}")
+        lines += ["", "Купить ещё — /buy"]
+        text = "\n".join(lines)
+    await update.effective_message.reply_text(text, reply_markup=main_keyboard())
 
 
 async def ref(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

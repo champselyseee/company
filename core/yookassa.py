@@ -157,12 +157,18 @@ def _grant_sync(payment_id: str, meta: dict, amount: dict) -> dict | None:
         log.warning("ЮKassa: платёж %s без metadata покупателя — не начисляем", payment_id)
         return None
 
+    balance_before = db.available_checks(user)
     if not db.grant_payment(payment_id, uid, value, checks=checks, days=days, quota=quota,
                             title=title, kind=kind, offer_id=offer_id, source=source):
         return None  # это уведомление уже обработано раньше
     referrer_id = db.reward_referrer(uid)  # идемпотентно (флаг rewarded)
     log.info("ЮKassa: платёж %s — пользователю %s начислено: %s", payment_id, uid, title)
-    return {"user_id": uid, "telegram_id": user.get("telegram_id"), "title": title, "referrer_id": referrer_id}
+    fresh = db.get_user_by_id(uid) or user
+    return {
+        "user_id": uid, "telegram_id": user.get("telegram_id"), "title": title, "referrer_id": referrer_id,
+        # баланс до/после — для сообщения «Баланс: 1 → 6» в боте
+        "balance_before": balance_before, "balance_after": db.available_checks(fresh),
+    }
 
 
 async def handle_notification(body) -> dict | None:

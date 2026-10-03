@@ -1,4 +1,4 @@
-"""Клавиатуры бота: кнопки мини-аппы и сайта, тарифы /buy и кнопка оплаты."""
+"""Клавиатуры бота: кнопки мини-аппы и сайта, тарифы /buy, кнопка оплаты и «Мои покупки»."""
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
 
@@ -10,6 +10,7 @@ except ImportError:  # pragma: no cover
     import catalog  # type: ignore
 
 BUY_PREFIX = "buy:"  # callback_data кнопок тарифов: «buy:<kind>:<id>»
+PURCHASES_CALLBACK = "purchases"  # callback_data кнопки «🧾 Мои покупки»
 
 
 def offers_keyboard() -> InlineKeyboardMarkup:
@@ -43,3 +44,11 @@ def main_keyboard() -> InlineKeyboardMarkup | None:
     if config.SITE_URL:
         rows.append([InlineKeyboardButton("🌐 Сайт Expert ЕГЭ", url=config.SITE_URL)])
     return InlineKeyboardMarkup(rows) if rows else None
+
+
+def with_purchases_keyboard() -> InlineKeyboardMarkup:
+    """Кнопки main_keyboard + «🧾 Мои покупки» — под балансом и сообщением об оплате."""
+    base = main_keyboard()
+    rows = [list(row) for row in base.inline_keyboard] if base else []
+    rows.append([InlineKeyboardButton("🧾 Мои покупки", callback_data=PURCHASES_CALLBACK)])
+    return InlineKeyboardMarkup(rows)

@@ -310,6 +310,13 @@ def has_access(user: dict) -> bool:
     return subscription_left(user) > 0 or user.get("paid_checks", 0) > 0
 
 
+def available_checks(user: dict) -> int:
+    """Сколько проверок доступно прямо сейчас: остаток месячной нормы подписки +
+    оплаченные + бесплатная (если не потрачена). То же число, что «баланс» на сайте и в боте."""
+    free = 0 if user.get("free_used") else 1
+    return subscription_left(user) + int(user.get("paid_checks") or 0) + free
+
+
 def consume_check(user_id: int) -> str | None:
     """Атомарно проверяет доступ и списывает ОДНУ проверку. Возвращает, что списано:
 
@@ -637,6 +644,18 @@ def mark_purchase_canceled(payment_id: str) -> None:
             (payment_id,),
         )
         conn.commit()
+
+
+def pending_purchases(source: str, max_age: timedelta) -> list[dict]:
+    """Неоплаченные платежи ЮKassa из source ('bot' | 'site') не старше max_age — их
+    страховочно переспрашивает фоновая проверка (если уведомление ЮKassa не дошло)."""
+    with _conn() as conn:
+        return conn.execute(
+            "SELECT payment_id, created_at FROM purchases "
+            "WHERE status = 'pending' AND provider = 'yookassa' AND source = %s AND created_at > %s "
+            "ORDER BY created_at",
+            (source, _now() - max_age),
+        ).fetchall()
 
 
 def get_purchases(user_id: int, limit: int = 50) -> list[dict]:

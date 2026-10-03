@@ -18,8 +18,8 @@ from telegram.ext import (
     filters,
 )
 
-from . import config, reminders
-from .handlers import commands
+from . import config, payments, reminders
+from .handlers import commands, feedback
 from .webapp import run_web
 
 logging.basicConfig(
@@ -41,10 +41,17 @@ def build_application():
     app.add_handler(CommandHandler("help", commands.help_cmd))
     app.add_handler(CommandHandler("balance", commands.balance))
     app.add_handler(CommandHandler("history", commands.history_cmd))
+    app.add_handler(CommandHandler("purchases", commands.purchases_cmd))
     app.add_handler(CommandHandler("buy", commands.buy))
     app.add_handler(CommandHandler("ref", commands.ref))
     # Кнопки тарифов из /buy → создание платежа ЮKassa.
     app.add_handler(CallbackQueryHandler(commands.buy_callback, pattern=r"^buy:"))
+    # Кнопка «🧾 Мои покупки» (под /balance и сообщением об оплате).
+    app.add_handler(CallbackQueryHandler(commands.purchases_cmd, pattern=r"^purchases$"))
+    # Опрос-отзыв о проверке: кнопки (⭐, строгость, «Пропустить») и текстовые ответы.
+    # Текст ловим в группе -1 раньше подсказки open_app_hint — только если опрос ждёт ответа.
+    app.add_handler(CallbackQueryHandler(feedback.on_callback, pattern=r"^fb:"))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, feedback.on_text), group=-1)
 
     # Обычное сообщение (текст/фото) в чате — подсказываем открыть мини-аппу.
     app.add_handler(MessageHandler(filters.PHOTO, commands.open_app_hint))
@@ -64,6 +71,8 @@ async def main() -> None:
         await app.updater.start_polling()
         # Напоминания — фоновая задача в том же event loop. Ссылку держим, чтобы задачу не собрал GC.
         reminders_task = asyncio.create_task(reminders.run_loop(app.bot))  # noqa: F841
+        # Страховка начислений: сами переспрашиваем ЮKassa, если вебхук не дошёл.
+        payments_task = asyncio.create_task(payments.run_loop(app.bot))  # noqa: F841
         await asyncio.Event().wait()
 
 
