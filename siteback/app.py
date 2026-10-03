@@ -11,6 +11,7 @@
 from __future__ import annotations
 
 
+import asyncio
 import base64
 import io
 import logging
@@ -73,6 +74,14 @@ def _startup() -> None:
         db.init_schema()
     except Exception:  # noqa: BLE001 — сервис должен подняться даже без БД (health-check)
         log.exception("init_schema при старте не удался (проверь DATABASE_URL)")
+
+
+@app.on_event("startup")
+async def _start_payment_sync() -> None:
+    """Страховка оплат сайта: раз в минуту сами переспрашиваем ЮKassa о своих неоплаченных
+    платежах — если уведомление не дошло, а покупатель уже ушёл со страницы (опроса нет)."""
+    if config.PAYMENTS_MODE == "yookassa":
+        app.state.payment_sync = asyncio.create_task(yookassa.run_sync_loop("site"))
 
 
 # ── Модели запросов (то, что присылает фронт) ──
@@ -248,7 +257,6 @@ async def create_check(body: CheckBody, user: dict = Depends(current_user)) -> d
             text=body.studentText,
             task_text=body.taskText,  # задание тоже уходит в Claude (раньше доходило только до ответа)
             source="site",
-            record=False,  # в историю пишем сами ниже — нужен id записи для анкеты отзыва
         )
     except ClaudeError as e:
         # ИИ не ответил — возвращаем зарезервированную проверку, чтобы не потерять её зря.
@@ -260,14 +268,15 @@ async def create_check(body: CheckBody, user: dict = Depends(current_user)) -> d
         log.exception("Проверка на сайте не удалась (user_id=%s)", user["id"])
         raise HTTPException(status_code=500, detail="Не удалось проверить работу, проверка возвращена") from e
 
-    # История + публичный счётчик. Сбой базы НЕ теряет готовый (дорогой) разбор — как было
-    # внутри check_work: отдаём его без checkId, анкету тогда не показываем.
+    # История + публичный счётчик + «спросить ли отзыв» (1-я и каждая 5-я проверка на сайте) —
+    # одной транзакцией в core.db. Сбой базы НЕ теряет готовый (дорогой) разбор: отдаём его
+    # без checkId, анкету тогда не показываем.
     check_id: int | None = None
     ask_feedback = False
     try:
-        check_id = await run_in_threadpool(db.record_check, user["id"], body.workType, answer, "site")
-        n = await run_in_threadpool(db.count_checks, user["id"], "site")
-        ask_feedback = n == 1 or n % FEEDBACK_ASK_EVERY == 0
+        check_id, ask_feedback = await run_in_threadpool(
+            db.record_check_and_ask, user["id"], body.workType, answer, "site"
+        )
     except Exception:
         log.exception("Не удалось записать проверку в историю (user_id=%s)", user["id"])
 
@@ -284,10 +293,6 @@ async def create_check(body: CheckBody, user: dict = Depends(current_user)) -> d
 
 
 # ── Отзыв о проверке (всплывающая анкета) ──
-
-# Анкету показываем после 1-й и дальше каждой 5-й проверки на сайте (решает сервер).
-FEEDBACK_ASK_EVERY = 5
-
 
 def _clean_text(value: str | None) -> str | None:
     value = (value or "").strip()

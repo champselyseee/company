@@ -92,11 +92,11 @@ def verify_init_data(init_data: str) -> dict | None:
         hmac.compare_digest(calc_no_sig, received_hash)
         or hmac.compare_digest(calc_with_sig, received_hash)
     ):
+        # Посчитанные (правильные) хеши и данные пользователя в лог НЕ пишем: по ним любой,
+        # кто читает логи, собрал бы рабочий initData для чужого аккаунта.
         log.warning(
-            "initData: hash НЕ совпал. recv=%s calc_no_sig=%s calc_with_sig=%s "
-            "auth_date=%s query_id=%s user=%r",
-            received_hash, calc_no_sig, calc_with_sig,
-            data.get("auth_date"), data.get("query_id"), data.get("user"),
+            "initData: hash НЕ совпал (auth_date=%s, query_id=%s, есть signature: %s)",
+            data.get("auth_date"), data.get("query_id"), signature is not None,
         )
         return None
 
@@ -113,7 +113,7 @@ def verify_init_data(init_data: str) -> dict | None:
         user = json.loads(data.get("user", ""))
         telegram_id = int(user["id"])
     except (ValueError, KeyError, TypeError):
-        log.warning("initData: не разобрать поле user=%r", data.get("user"))
+        log.warning("initData: не разобрать поле user")
         return None
     log.info("initData: OK, telegram_id=%s, возраст %.0f c", telegram_id, age)
     return {"telegram_id": telegram_id, "username": user.get("username")}
@@ -200,15 +200,16 @@ async def handle_me(request):
     if user is None:
         return _json({"error": "unauthorized"}, 401)
     total = await asyncio.to_thread(db.get_total_checks)  # публичный счётчик «работ проверено»
-    sub = db.has_subscription(user)
-    free_left = 0 if user.get("free_used") else 1
-    paid = user.get("paid_checks", 0) or 0
-    sub_left = db.subscription_left(user)  # 0, если подписки нет
+    last = await asyncio.to_thread(db.get_purchases, user["id"], 1)
+    paid_at = (last[0]["paid_at"] or last[0]["created_at"]) if last else None
     return _json({
         "username": user.get("username"),
-        "subscription": sub,
-        "checksLeft": sub_left + free_left + paid,  # всего доступно сейчас
+        "subscription": db.has_subscription(user),
+        "checksLeft": db.available_checks(user),  # всего доступно сейчас (та же формула, что везде)
         "totalChecks": total,
+        # Когда была последняя оплата — мини-аппа показывает «Баланс пополнен» только после
+        # новой покупки, а не когда в начале месяца обновилась норма подписки.
+        "lastPurchaseAt": paid_at.isoformat() if paid_at else None,
     })
 
 
@@ -242,7 +243,6 @@ async def handle_check(request):
         answer = await claude.check_work(
             user_id, work_type, text=text, photos=photos,
             file_name=file_name, file_text=file_text, source="bot",
-            record=False,  # в историю пишем сами ниже — нужен id записи для опроса-отзыва
         )
     except claude.ClaudeError as e:
         await asyncio.to_thread(db.refund_check, user_id, kind)  # ИИ не ответил — вернуть
@@ -252,13 +252,12 @@ async def handle_check(request):
         log.exception("Проверка через мини-аппу не удалась (user_id=%s)", user_id)
         return _json({"error": "server_error"}, 500)
 
-    # История + публичный счётчик. Сбой базы НЕ теряет готовый разбор (как было внутри
-    # check_work) — тогда просто без опроса. Опрос — после 1-й и каждой 5-й проверки в боте,
-    # отдельной задачей, чтобы не задерживать ответ мини-аппе.
+    # История + публичный счётчик. Сбой базы НЕ теряет готовый разбор — тогда просто без
+    # опроса. Опрос (1-я и каждая 5-я проверка в боте — решает core.db) отправляем отдельной
+    # задачей, чтобы не задерживать ответ мини-аппе.
     try:
-        history_id = await asyncio.to_thread(db.record_check, user_id, work_type, answer, "bot")
-        n = await asyncio.to_thread(db.count_checks, user_id, "bot")
-        if feedback.should_ask(n) and user.get("telegram_id"):
+        history_id, ask = await asyncio.to_thread(db.record_check_and_ask, user_id, work_type, answer, "bot")
+        if ask and user.get("telegram_id"):
             _background(feedback.send_poll(request.app.get(BOT_KEY), user["telegram_id"], history_id))
     except Exception:
         log.exception("Не удалось записать проверку в историю (user_id=%s)", user_id)
@@ -313,9 +312,7 @@ async def handle_yukassa_webhook(request):
         log.exception("ЮKassa: сбой обработки уведомления")
         return web.Response(status=500)
     if grant:
-        bot = request.app.get(BOT_KEY)
-        await notify.notify_buyer(bot, grant)
-        await notify.notify_referrer(bot, grant.get("referrer_id"))
+        await notify.on_payment_granted(request.app.get(BOT_KEY), grant)
     return web.Response(status=200)
 
 

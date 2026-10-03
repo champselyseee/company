@@ -93,15 +93,18 @@ async def balance(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         await update.message.reply_text("👑 У тебя безлимитный доступ.", reply_markup=main_keyboard())
         return
     row = await asyncio.to_thread(db.get_or_create_telegram_user, user.id, user.username or None)
+    # Итог — той же формулой, что «Баланс: X → Y» после оплаты и баланс на сайте; ниже — из чего он.
+    lines = [f"📊 Проверок доступно: {db.available_checks(row)}"]
     if db.has_subscription(row):
-        left = db.subscription_left(row)
-        text = f"📅 Подписка активна: осталось {left} из {db.subscription_quota(row)} проверок в этом месяце."
-    else:
-        free_left = 0 if row.get("free_used") else 1
-        paid = row.get("paid_checks", 0) or 0
-        total = free_left + paid
-        suffix = " (в т.ч. 1 бесплатная)" if free_left else ""
-        text = f"📊 Проверок доступно: {total}{suffix}\n\nКупить ещё — /buy."
+        lines.append(
+            f"📅 По подписке в этом месяце: {db.subscription_left(row)} из {db.subscription_quota(row)}"
+        )
+    paid = int(row.get("paid_checks") or 0)
+    if paid:
+        lines.append(f"💳 Купленных: {paid}")
+    if not row.get("free_used"):
+        lines.append("🎁 Бесплатная: 1")
+    text = "\n".join(lines) + "\n\nКупить ещё — /buy."
     await update.message.reply_text(_with_site(text, site_line), reply_markup=with_purchases_keyboard())
 
 

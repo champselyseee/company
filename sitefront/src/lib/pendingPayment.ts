@@ -6,8 +6,8 @@
 
 const KEY = 'ege_pending_payment'
 
-/** Сколько ждём зачисления после ухода на оплату — дальше запись считаем устаревшей. */
-export const PENDING_TTL_MS = 30 * 60 * 1000
+/** Сколько помним платёж после ухода на оплату (с запасом на долгую оплату через банк). */
+export const PENDING_TTL_MS = 60 * 60 * 1000
 
 export interface PendingPayment {
   paymentId: string

@@ -671,35 +671,44 @@ def get_purchases(user_id: int, limit: int = 50) -> list[dict]:
 
 # ── История проверок + публичный счётчик ──
 
-def record_check(user_id: int, work_type: str, result: str, source: str = "bot") -> int:
-    """Атомарно: пишет проверку в историю и увеличивает публичный счётчик total_checks.
+# Анкета отзыва (сайт — окно, бот — опрос в чате): после 1-й и каждой 5-й проверки
+# человека в этом месте (проверки на сайте и в боте считаются отдельно).
+FEEDBACK_ASK_EVERY = 5
 
-    Возвращает id новой строки истории (сайт привязывает к нему анкету отзыва).
+
+def _insert_check_tx(conn, user_id: int, work_type: str, result: str, source: str) -> int:
+    """Строка истории + «+1» к публичному счётчику — внутри открытой транзакции (без commit)."""
+    row = conn.execute(
+        "INSERT INTO history (user_id, source, work_type, result) VALUES (%s, %s, %s, %s) "
+        "RETURNING id",
+        (user_id, source, work_type, result[:3000]),
+    ).fetchone()
+    conn.execute("UPDATE counters SET value = value + 1 WHERE name = 'total_checks'")
+    return row["id"]
+
+
+def record_check(user_id: int, work_type: str, result: str, source: str = "bot") -> int:
+    """Атомарно: пишет проверку в историю и увеличивает публичный счётчик. Возвращает id записи."""
+    with _conn() as conn:
+        check_id = _insert_check_tx(conn, user_id, work_type, result, source)
+        conn.commit()
+        return check_id
+
+
+def record_check_and_ask(user_id: int, work_type: str, result: str, source: str) -> tuple[int, bool]:
+    """Пишет проверку (как record_check) и тут же решает, спросить ли отзыв — одной транзакцией.
+
+    Возвращает (id записи истории, спросить ли отзыв): да — если это 1-я или каждая
+    FEEDBACK_ASK_EVERY-я проверка человека в source ('site' | 'bot').
     """
     with _conn() as conn:
-        row = conn.execute(
-            "INSERT INTO history (user_id, source, work_type, result) VALUES (%s, %s, %s, %s) "
-            "RETURNING id",
-            (user_id, source, work_type, result[:3000]),
-        ).fetchone()
-        conn.execute("UPDATE counters SET value = value + 1 WHERE name = 'total_checks'")
+        check_id = _insert_check_tx(conn, user_id, work_type, result, source)
+        n = conn.execute(
+            "SELECT COUNT(*) AS n FROM history WHERE user_id = %s AND source = %s",
+            (user_id, source),
+        ).fetchone()["n"]
         conn.commit()
-        return row["id"]
-
-
-def count_checks(user_id: int, source: str | None = None) -> int:
-    """Сколько проверок у пользователя в истории (source — только с сайта/бота; None — все)."""
-    with _conn() as conn:
-        if source is None:
-            row = conn.execute(
-                "SELECT COUNT(*) AS n FROM history WHERE user_id = %s", (user_id,)
-            ).fetchone()
-        else:
-            row = conn.execute(
-                "SELECT COUNT(*) AS n FROM history WHERE user_id = %s AND source = %s",
-                (user_id, source),
-            ).fetchone()
-        return row["n"]
+        return check_id, n == 1 or n % FEEDBACK_ASK_EVERY == 0
 
 
 def get_history(user_id: int, limit: int = 5) -> list[dict]:
@@ -759,9 +768,12 @@ def save_feedback(
 def _selftest() -> None:
     init_schema()
     test_tg = 999999001  # заведомо «тестовый» telegram_id
+    test_pid = "selftest-payment-0001"
 
-    # на всякий случай убираем следы прошлого прогона
+    # на всякий случай убираем следы прошлого (в т.ч. прерванного) прогона: платёж —
+    # раньше пользователя, у processed_payments нет ON DELETE CASCADE
     with _conn() as conn:
+        conn.execute("DELETE FROM processed_payments WHERE payment_id = %s", (test_pid,))
         conn.execute("DELETE FROM users WHERE telegram_id = %s", (test_tg,))
         conn.commit()
 
@@ -796,7 +808,6 @@ def _selftest() -> None:
     print(f"подписка: норма {SUBSCRIPTION_MONTHLY_QUOTA}/мес — списание/возврат OK")
 
     # история покупок: pending → оплата (succeeded) → повтор уведомления не дублирует
-    test_pid = "selftest-payment-0001"
     create_purchase(test_pid, uid, title="5 проверок", amount=199, source="bot",
                     kind="package", offer_id="p5")
     assert get_purchase(uid, test_pid)["status"] == "pending", "новая покупка — pending"

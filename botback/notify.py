@@ -1,6 +1,6 @@
 """Сообщения об оплате в Telegram: покупателю («Оплата прошла», баланс до → после) и
-пригласившему (бонус). Общие для вебхука ЮKassa (webapp.py) и страховочной проверки
-платежей (payments.py) — кто бы ни начислил, человек получает одно и то же сообщение.
+пригласившему (бонус). Общие для вебхука ЮKassa (webapp.py) и страховки оплат
+(core/yookassa.run_sync_loop из main.py) — кто бы ни начислил, сообщение одно и то же.
 """
 
 from __future__ import annotations
@@ -55,3 +55,9 @@ async def notify_referrer(bot, referrer_id: int | None) -> None:
             )
     except Exception:
         log.warning("Не удалось уведомить пригласившего (users.id=%s)", referrer_id, exc_info=True)
+
+
+async def on_payment_granted(bot, grant: dict) -> None:
+    """Новое начисление (вебхук или страховка): пишем покупателю и пригласившему."""
+    await notify_buyer(bot, grant)
+    await notify_referrer(bot, grant.get("referrer_id"))

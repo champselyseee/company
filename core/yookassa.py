@@ -6,8 +6,11 @@
     берём из него только id и переспрашиваем платёж в API ЮKassa. Начисляем, только если
     там status=succeeded, paid=true и сумма совпадает с тарифом — ровно один раз
     (db.grant_payment, защита от повторных уведомлений);
-  • sync_payment — то же самое, но по запросу сайта, пока покупатель ждёт на странице:
-    не дожидаемся уведомления, а сами спрашиваем ЮKassa (кто первый — тот и начисляет).
+  • sync_payment — то же самое, но по нашему запросу: не дожидаемся уведомления, а сами
+    спрашиваем ЮKassa (кто первый — тот и начисляет). Его зовут опрос статуса с сайта
+    (пока покупатель ждёт на странице) и страховка run_sync_loop;
+  • run_sync_loop / sync_pending — страховка начислений: бот и сайт раз в минуту сами
+    переспрашивают ЮKassa о своих неоплаченных платежах (если уведомление не дошло).
 
 Ключи магазина из переменных окружения своей службы: YUKASSA_SHOP_ID, YUKASSA_SECRET.
 У бота и сайта могут быть РАЗНЫЕ магазины — поэтому у каждой службы свой вебхук
@@ -22,7 +25,9 @@ import logging
 import os
 import re
 import uuid
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
+from typing import Awaitable, Callable
 
 import httpx
 
@@ -214,3 +219,70 @@ async def sync_payment(payment_id: str) -> dict | None:
     if status == "canceled":
         await asyncio.to_thread(db.mark_purchase_canceled, payment_id)
     return None
+
+
+# ── Страховка начислений (если уведомление ЮKassa задержалось или не пришло) ──
+# Свежие неоплаченные платежи (до 30 мин) спрашиваем каждую минуту, старше — раз в 10 минут,
+# старше суток — бросаем. Платежи бота и сайта — разные магазины: каждая служба проверяет
+# только свои (source) своими ключами.
+
+SYNC_EVERY_SECONDS = 60
+SYNC_FIRST_DELAY_SECONDS = 30
+SYNC_MAX_AGE = timedelta(days=1)
+SYNC_SLOW_AFTER = timedelta(minutes=30)
+SYNC_SLOW_EVERY = timedelta(minutes=10)
+
+_last_synced: dict[str, dict[str, datetime]] = {}  # source → {payment_id → когда спрашивали}
+
+
+def _sync_due(seen: dict[str, datetime], row: dict, now: datetime) -> bool:
+    if now - row["created_at"] < SYNC_SLOW_AFTER:
+        return True
+    last = seen.get(row["payment_id"])
+    return last is None or now - last >= SYNC_SLOW_EVERY
+
+
+async def sync_pending(source: str, on_grant: Callable[[dict], Awaitable[None]] | None = None) -> int:
+    """Один проход страховки по неоплаченным платежам source ('bot' | 'site').
+
+    Оплаченный в ЮKassa — начисляем (ровно один раз, как вебхук) и зовём on_grant(grant)
+    (бот пишет покупателю «Оплата прошла»). Сбой на одном платеже — только лог: остальные
+    проверяются дальше. Возвращает число НОВЫХ начислений.
+    """
+    if not configured():
+        return 0
+    rows = await asyncio.to_thread(db.pending_purchases, source, SYNC_MAX_AGE)
+    seen = _last_synced.setdefault(source, {})
+    now = datetime.now(timezone.utc)
+    granted = 0
+    for row in rows:
+        pid = row["payment_id"]
+        if not _sync_due(seen, row, now):
+            continue
+        seen[pid] = now
+        try:
+            grant = await sync_payment(pid)
+            if grant:
+                granted += 1
+                log.info("Страховка оплат (%s): платёж %s начислен без вебхука", source, pid)
+                if on_grant is not None:
+                    await on_grant(grant)
+        except YooKassaError as e:
+            log.warning("Страховка оплат (%s): не удалось проверить платёж %s: %s", source, pid, e)
+        except Exception:
+            log.exception("Страховка оплат (%s): сбой на платеже %s — идём дальше", source, pid)
+    live = {r["payment_id"] for r in rows}
+    for pid in [p for p in seen if p not in live]:  # оплачен, отменён или устарел
+        del seen[pid]
+    return granted
+
+
+async def run_sync_loop(source: str, on_grant: Callable[[dict], Awaitable[None]] | None = None) -> None:
+    """Бесконечный цикл страховки (фоновая задача службы). Без ключей ЮKassa ничего не делает."""
+    await asyncio.sleep(SYNC_FIRST_DELAY_SECONDS)
+    while True:
+        try:
+            await sync_pending(source, on_grant)
+        except Exception:
+            log.exception("Страховка оплат (%s): сбой прохода, повторим через минуту", source)
+        await asyncio.sleep(SYNC_EVERY_SECONDS)

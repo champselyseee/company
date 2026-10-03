@@ -12,6 +12,8 @@ export interface MeData {
   checksLeft: number | null
   /** Публичный счётчик «работ проверено». */
   totalChecks: number | null
+  /** Когда была последняя оплата (ISO) — чтобы отличить покупку от обновления нормы подписки. */
+  lastPurchaseAt: string | null
 }
 
 /**
@@ -21,14 +23,15 @@ export interface MeData {
 export async function fetchMe(signal?: AbortSignal): Promise<MeData> {
   try {
     const res = await fetch(`${BACKEND_URL}/api/me`, { headers: authHeaders(), signal })
-    if (!res.ok) return { checksLeft: null, totalChecks: null }
+    if (!res.ok) return { checksLeft: null, totalChecks: null, lastPurchaseAt: null }
     const data = await res.json()
     return {
       checksLeft: typeof data.checksLeft === 'number' ? data.checksLeft : null,
       totalChecks: typeof data.totalChecks === 'number' ? data.totalChecks : null,
+      lastPurchaseAt: typeof data.lastPurchaseAt === 'string' ? data.lastPurchaseAt : null,
     }
   } catch {
-    return { checksLeft: null, totalChecks: null }
+    return { checksLeft: null, totalChecks: null, lastPurchaseAt: null }
   }
 }
 

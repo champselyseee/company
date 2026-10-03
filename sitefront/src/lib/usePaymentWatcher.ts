@@ -1,18 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { api, ApiError } from './api'
-import {
-  PENDING_TTL_MS,
-  clearPendingPayment,
-  loadPendingPayment,
-  type PendingPayment,
-} from './pendingPayment'
+import { clearPendingPayment, loadPendingPayment, type PendingPayment } from './pendingPayment'
 
 /* Слежение за платежом после возврата со страницы ЮKassa.
 
    Если перед уходом на оплату был запомнен платёж (lib/pendingPayment.ts), спрашиваем сервер
-   о его статусе: первые 3 минуты — каждые 4 с, потом раз в 15 с (до 30 мин). Сервер сам
-   переспрашивает кассу и начисляет. Оплачено → onCredited (анимация + уведомление);
-   отменён → фаза «canceled». Фазы управляют плашкой PaymentBanner. */
+   о его статусе: первые 3 минуты ПОСЛЕ ВОЗВРАЩЕНИЯ — каждые 4 с, потом раз в 15 с (до 30 мин).
+   Отсчёт — с возвращения, а не с ухода на оплату: оплата через банк может идти дольше 3 минут,
+   и вернувшийся сразу увидел бы «касса ещё не подтвердила». Сервер сам переспрашивает кассу и
+   начисляет. Оплачено → onCredited (анимация + уведомление); отменён → фаза «canceled».
+   Фазы управляют плашкой PaymentBanner. */
 
 export type PaymentPhase = 'idle' | 'waiting' | 'slow' | 'canceled'
 
@@ -26,6 +23,7 @@ export interface Credit {
 }
 
 const SLOW_AFTER_MS = 3 * 60 * 1000
+const WATCH_FOR_MS = 30 * 60 * 1000
 const FAST_POLL_MS = 4000
 const SLOW_POLL_MS = 15000
 
@@ -48,13 +46,14 @@ export function usePaymentWatcher(enabled: boolean, onCredited: (c: Credit) => v
     if (p) {
       setPending(p)
       setHidden(false)
-      setPhase(Date.now() - p.startedAt > SLOW_AFTER_MS ? 'slow' : 'waiting')
+      setPhase('waiting')
     }
   }, [enabled])
 
   useEffect(() => {
     if (!enabled || !pending) return
     const p = pending
+    const returnedAt = Date.now() // человек вернулся на сайт — отсюда и считаем 3 минуты
     let alive = true
     let timer = 0
 
@@ -84,8 +83,8 @@ export function usePaymentWatcher(enabled: boolean, onCredited: (c: Credit) => v
         if (e instanceof ApiError && e.status === 401) return stop('idle', false) // сессия кончилась
         // сеть/сервер — просто пробуем ещё раз по расписанию
       }
-      const elapsed = Date.now() - p.startedAt
-      if (elapsed > PENDING_TTL_MS) {
+      const elapsed = Date.now() - returnedAt
+      if (elapsed > WATCH_FOR_MS) {
         // Дольше 30 минут не ждём: плашку «долго» оставляем, пока её не скроют.
         clearPendingPayment()
         setPending(null)

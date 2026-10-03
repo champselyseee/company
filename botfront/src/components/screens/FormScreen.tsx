@@ -22,7 +22,7 @@ import {
 import { fetchMe, recognizePhoto } from '../../lib/api'
 import { fileToDataUrl, resizeImageToBase64 } from '../../lib/image'
 import { MAX_FILE_BYTES, MAX_PHOTOS } from '../../lib/config'
-import { loadLastBalance, saveLastBalance } from '../../lib/lastBalance'
+import { currentMonth, isCredit, loadLastBalance, saveLastBalance } from '../../lib/lastBalance'
 import { notify } from '../../lib/telegram'
 import styles from './FormScreen.module.css'
 
@@ -121,8 +121,11 @@ export function FormScreen({
       setChecksLeft(me.checksLeft)
       if (me.checksLeft !== null) {
         const prev = loadLastBalance()
-        if (prev !== null && me.checksLeft > prev) setCredit({ from: prev, to: me.checksLeft })
-        saveLastBalance(me.checksLeft)
+        // Только настоящее пополнение (оплата/бонус), а не обновление месячной нормы подписки.
+        if (prev && isCredit(prev, me.checksLeft, me.lastPurchaseAt)) {
+          setCredit({ from: prev.balance, to: me.checksLeft })
+        }
+        saveLastBalance({ balance: me.checksLeft, month: currentMonth(), purchaseAt: me.lastPurchaseAt })
       }
     })
     return () => {

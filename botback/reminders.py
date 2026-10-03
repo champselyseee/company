@@ -89,13 +89,7 @@ async def run_loop(bot) -> None:
     if not config.REMINDERS_ENABLED:
         log.info("Напоминания выключены (REMINDERS_ENABLED)")
         return
-    await asyncio.sleep(FIRST_CHECK_DELAY_SECONDS)
-    try:
-        # Схему обновляет при старте сайт; если он ещё не перезапускался, колонок
-        # напоминаний может не быть. init_schema идемпотентна — безопасно.
-        await asyncio.to_thread(db.init_schema)
-    except Exception:
-        log.exception("Напоминания: init_schema не удался")
+    await asyncio.sleep(FIRST_CHECK_DELAY_SECONDS)  # таблицы уже создал main() при старте бота
     while True:
         try:
             if is_daytime():

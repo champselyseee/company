@@ -18,9 +18,14 @@ from telegram.ext import (
     filters,
 )
 
-from . import config, payments, reminders
+from . import config, notify, reminders
 from .handlers import commands, feedback
 from .webapp import run_web
+
+try:  # общий код core/ — как пакет или как одиночные модули
+    from core import db, yookassa
+except ImportError:  # pragma: no cover
+    import db, yookassa  # type: ignore
 
 logging.basicConfig(
     level=logging.INFO,
@@ -54,17 +59,26 @@ def build_application():
     # Опрос-отзыв о проверке: кнопки (⭐, строгость, «Пропустить») и текстовые ответы.
     # Текст ловим в группе -1 раньше подсказки open_app_hint — только если опрос ждёт ответа.
     app.add_handler(CallbackQueryHandler(feedback.on_callback, pattern=r"^fb:"))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, feedback.on_text), group=-1)
+    # Только НОВЫЕ сообщения (UpdateType.MESSAGE): правка старого сообщения приходит без
+    # update.message, и хендлеры на reply_text падали бы.
+    new_text = filters.TEXT & ~filters.COMMAND & filters.UpdateType.MESSAGE
+    app.add_handler(MessageHandler(new_text, feedback.on_text), group=-1)
 
     # Обычное сообщение (текст/фото) в чате — подсказываем открыть мини-аппу.
-    app.add_handler(MessageHandler(filters.PHOTO, commands.open_app_hint))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, commands.open_app_hint))
+    app.add_handler(MessageHandler(filters.PHOTO & filters.UpdateType.MESSAGE, commands.open_app_hint))
+    app.add_handler(MessageHandler(new_text, commands.open_app_hint))
 
     return app
 
 
 async def main() -> None:
     app = build_application()
+    # Таблицы — до приёма платежей и проверок (идемпотентно). Не ждём, пока это сделает сайт:
+    # без таблицы purchases начисление оплаты откатилось бы целиком.
+    try:
+        await asyncio.to_thread(db.init_schema)
+    except Exception:
+        log.exception("init_schema при старте бота не удался (проверь DATABASE_URL)")
     async with app:
         # Веб-сервер мини-аппы и вебхука — в том же процессе и event loop, что и polling.
         # Запускаем после инициализации бота: вебхуку нужен app.bot, чтобы писать в Telegram.
@@ -74,8 +88,10 @@ async def main() -> None:
         await app.updater.start_polling()
         # Напоминания — фоновая задача в том же event loop. Ссылку держим, чтобы задачу не собрал GC.
         reminders_task = asyncio.create_task(reminders.run_loop(app.bot))  # noqa: F841
-        # Страховка начислений: сами переспрашиваем ЮKassa, если вебхук не дошёл.
-        payments_task = asyncio.create_task(payments.run_loop(app.bot))  # noqa: F841
+        # Страховка начислений: сами переспрашиваем ЮKassa о платежах бота, если вебхук не дошёл.
+        payments_task = asyncio.create_task(  # noqa: F841
+            yookassa.run_sync_loop("bot", on_grant=lambda grant: notify.on_payment_granted(app.bot, grant))
+        )
         await asyncio.Event().wait()
 
 

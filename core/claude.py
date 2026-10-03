@@ -8,9 +8,8 @@
   • промпты по типам работ и схема ответа собраны в одном месте;
     (распознавание рукописного текста вынесено в отдельный модуль core/grok.py на Grok;
      Claude по-прежнему принимает ФОТО ЗАДАНИЯ для проверки — это параметр photos у check_work);
-  • после успешной проверки модуль сам пишет её в общую базу (core/db.py):
-    строка в истории + «+1» к публичному счётчику counters.total_checks —
-    одной транзакцией через db.record_check();
+  • в базу модуль НЕ пишет: проверку записывает вызывающий код (сайт/бот) через
+    db.record_check_and_ask() — ему нужен номер записи истории для анкеты отзыва;
   • ошибки отдаются понятным исключением ClaudeError (caller решает, как показать);
   • кэш промптов: длинная постоянная инструкция по типу работы идёт первым куском
     запроса с меткой cache_control, всё изменчивое (фото, задание, работа) — после неё.
@@ -358,14 +357,14 @@ def _build_user_content(prompt: str, combined_text: str, photos) -> list[dict]:
     return content
 
 
-def _log_usage(work_type: str, message) -> None:
+def _log_usage(work_type: str, message, user_id: int, source: str) -> None:
     """Пишет в лог расход токенов — по cache_read видно, срабатывает ли кэш промпта."""
     usage = getattr(message, "usage", None)
     if usage is None:
         return
     log.info(
-        "Claude usage: type=%s model=%s input=%s cache_write=%s cache_read=%s output=%s",
-        work_type, MODEL,
+        "Claude usage: user=%s source=%s type=%s model=%s input=%s cache_write=%s cache_read=%s output=%s",
+        user_id, source, work_type, MODEL,
         getattr(usage, "input_tokens", 0) or 0,
         getattr(usage, "cache_creation_input_tokens", 0) or 0,
         getattr(usage, "cache_read_input_tokens", 0) or 0,
@@ -383,18 +382,13 @@ async def check_work(
     file_text: str | None = None,
     task_text: str | None = None,
     source: str = "bot",
-    record: bool = True,
 ) -> str:
-    """Проверяет работу через Claude и (по умолчанию) записывает её в общую базу.
+    """Проверяет работу через Claude. В базу не пишет — это делает caller (db.record_check_and_ask).
 
-    user_id — ВНУТРЕННИЙ users.id (не telegram_id): caller сначала находит/создаёт
-    пользователя через db.get_or_create_*(), а сюда передаёт users.id.
+    user_id — ВНУТРЕННИЙ users.id (не telegram_id), source — 'site' | 'bot': только для лога.
     work_type — один из ключей PROMPTS ('email' | 'essay' | 'composition').
     task_text — текст задания (сайт: вставленный или распознанный с фото/PDF), если есть;
     работой он не считается — пустую работу с одним заданием не проверяем.
-
-    После успешного ответа зовёт db.record_check(...), которая ОДНОЙ транзакцией
-    пишет строку в историю и +1 к публичному счётчику counters.total_checks.
 
     Возвращает строку-ответ (JSON по RESULT_SCHEMA). При проблеме — ClaudeError.
     """
@@ -444,30 +438,13 @@ async def check_work(
     except anthropic.APIStatusError as e:
         raise ClaudeError(f"Anthropic error: {str(e)[:200]}") from e
 
-    _log_usage(work_type, message)
+    _log_usage(work_type, message, user_id, source)
 
     if message.stop_reason == "refusal":
         raise ClaudeError("Модель отклонила запрос")
     answer = _extract_text(message)
     if not answer:
         raise ClaudeError("ИИ вернул пустой ответ")
-
-    if record:
-        # Ленивый импорт общей базы: чтобы --selftest не требовал psycopg.
-        try:
-            from . import db
-        except ImportError:
-            import db
-        try:
-            db.record_check(user_id, work_type, answer, source=source)
-        except Exception:
-            # База временно недоступна — НЕ теряем уже полученный (дорогой) ответ:
-            # логируем и всё равно возвращаем результат пользователю.
-            log.exception(
-                "Не удалось записать проверку в базу (user_id=%s, type=%s)",
-                user_id, work_type,
-            )
-
     return answer
 
 
