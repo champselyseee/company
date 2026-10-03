@@ -26,6 +26,9 @@ logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s %(levelname)s %(name)s: %(message)s",
 )
+# httpx на INFO пишет каждый запрос с полным адресом, а в адресе Bot API — токен бота
+# (…/bot<токен>/getUpdates раз в 10 секунд). Оставляем от него только предупреждения и ошибки.
+logging.getLogger("httpx").setLevel(logging.WARNING)
 log = logging.getLogger(__name__)
 
 
