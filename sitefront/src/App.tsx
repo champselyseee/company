@@ -235,7 +235,7 @@ export function App() {
       </main>
 
       <footer className="container" style={footerStyle}>
-        <span>ЕГЭ-чекер · проверка по критериям</span>
+        <span>ЕГЭ Тьютор · проверка по критериям</span>
         <span>Английский · Русский</span>
       </footer>
 

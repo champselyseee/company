@@ -1,4 +1,4 @@
-"""Бэкенд сайта ЕГЭ-чекера (siteback) — FastAPI.
+"""Бэкенд сайта ЕГЭ Тьютора (siteback) — FastAPI.
 
 Отдаёт ровно те эндпоинты, которые уже ждёт фронт (sitefront/src/lib/api/).
 В базу и к ИИ ходит ТОЛЬКО через общий код core/ (db.py, claude.py, grok.py):
@@ -55,7 +55,7 @@ if not _core_log.handlers:
     _core_log.propagate = False  # не дублировать, если корневой логгер тоже настроят
 _core_log.setLevel(logging.INFO)
 
-app = FastAPI(title="ЕГЭ-чекер · siteback", docs_url="/api/docs", openapi_url="/api/openapi.json")
+app = FastAPI(title="ЕГЭ Тьютор · siteback", docs_url="/api/docs", openapi_url="/api/openapi.json")
 
 # CORS: разрешаем фронту (Vercel/localhost) слать запросы с куками.
 app.add_middleware(

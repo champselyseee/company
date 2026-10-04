@@ -153,7 +153,7 @@ export function Header({
           >
             <img className={styles.mark} src="/bear.png" alt="" aria-hidden="true" />
             <span className={styles.brandText}>
-              ЕГЭ<span className={styles.brandAccent}>-чекер</span>
+              ЕГЭ<span className={styles.brandAccent}> Тьютор</span>
             </span>
           </button>
 

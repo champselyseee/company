@@ -98,7 +98,7 @@ async def create_payment(user_id: int, kind: str, offer_id: str, return_url: str
         "amount": {"value": f"{Decimal(offer['price']):.2f}", "currency": "RUB"},
         "capture": True,
         "confirmation": {"type": "redirect", "return_url": return_url},
-        "description": f"Expert ЕГЭ: {offer['title']}"[:128],
+        "description": f"ЕГЭ Тьютор: {offer['title']}"[:128],
         "metadata": {"uid": str(user_id), "kind": kind, "offer": offer_id, "source": source},
     }
     data = await _request("POST", "/payments", json=body, headers={"Idempotence-Key": str(uuid.uuid4())})

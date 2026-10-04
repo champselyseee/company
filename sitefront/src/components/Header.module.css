@@ -48,7 +48,9 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
+  /* Минимальный зазор логотип ↔ меню. На десктопе у вошедшего всё впритык (логотип «ЕГЭ Тьютор»
+     + разделы + чип баланса + «Профиль») — при 16px «База аргументов» переносилась на 2 строки. */
+  gap: 10px;
 }
 
 /* Бренд */
@@ -80,9 +82,33 @@
   font-size: 19px;
   color: var(--ink);
   letter-spacing: -0.2px;
+  white-space: nowrap; /* «ЕГЭ Тьютор» — в одну строку (с пробелом на телефоне переносилось) */
 }
 .brandAccent {
   color: var(--indigo);
+}
+/* Узкие телефоны: «ЕГЭ Тьютор» + медведь + чип баланса + меню не влезали в ширину экрана
+   (браузер уменьшал всю страницу). Чуть уменьшаем логотип. */
+@media (max-width: 430px) {
+  .brand {
+    gap: 6px;
+  }
+  .mark {
+    width: 54px;
+    height: 43px;
+  }
+  .brandText {
+    font-size: 17px;
+  }
+}
+@media (max-width: 360px) {
+  .mark {
+    width: 44px;
+    height: 35px;
+  }
+  .brandText {
+    font-size: 15px;
+  }
 }
 
 /* Десктоп-навигация */
@@ -379,4 +405,23 @@
 }
 .mAccountLogin:active {
   filter: brightness(0.94);
+}
+
+/* Самые узкие экраны: чуть плотнее чипы справа (баланс бывает трёхзначным). */
+@media (max-width: 360px) {
+  .chips {
+    gap: 6px;
+  }
+  .chipBalance {
+    padding: 0 10px;
+  }
+}
+@media (max-width: 340px) {
+  .mark {
+    width: 38px;
+    height: 30px;
+  }
+  .brandText {
+    font-size: 14px;
+  }
 }

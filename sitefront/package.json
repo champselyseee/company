@@ -3,7 +3,7 @@
   "private": true,
   "version": "1.0.0",
   "type": "module",
-  "description": "Веб-фронтенд ЕГЭ-чекера (React + Vite). Обращается к бэкенду сайта через VITE_API_URL.",
+  "description": "Веб-фронтенд ЕГЭ Тьютора (React + Vite). Обращается к бэкенду сайта через VITE_API_URL.",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",

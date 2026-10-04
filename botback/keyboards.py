@@ -42,7 +42,7 @@ def main_keyboard() -> InlineKeyboardMarkup | None:
             [InlineKeyboardButton("✍️ Открыть проверку", web_app=WebAppInfo(url=config.WEBAPP_URL))]
         )
     if config.SITE_URL:
-        rows.append([InlineKeyboardButton("🌐 Сайт Expert ЕГЭ", url=config.SITE_URL)])
+        rows.append([InlineKeyboardButton("🌐 Сайт ЕГЭ Тьютор", url=config.SITE_URL)])
     return InlineKeyboardMarkup(rows) if rows else None
 
 
